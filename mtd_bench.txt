@@ -1,0 +1,93 @@
+vllm serve /root/vllm-workspace/mtd \
+    --trust-remote-code \
+    --served-model-name moss-mtd \
+    --host 0.0.0.0 \
+    --port 8123
+
+vllm bench serve \
+    --model /root/vllm-workspace/mtd \
+    --served-model-name moss-mtd \
+    --backend openai-audio \
+    --base-url http://localhost:8123 \
+    --endpoint /v1/audio/transcriptions \
+    --dataset-name custom_audio \
+    --dataset-path audio.jsonl \
+    --no-oversample \
+    --custom-output-len 512 \
+    --max-concurrency 16 \
+    --save-result \
+    --save-detailed \
+    --result-filename moss_mtd_transcriptions_bench.json
+
+ export MODEL_PATH=/root/vllm-workspace/mtd
+
+  vllm bench serve \
+    --model "$MODEL_PATH" \
+    --served-model-name moss-mtd \
+    --backend openai-audio \
+    --base-url http://localhost:8123 \
+    --endpoint /v1/audio/transcriptions \
+    --dataset-name custom_audio \
+    --dataset-path audio.jsonl \
+    --num-prompts 256 \
+    --num-warmups 4 \
+    --custom-output-len 512 \
+    --max-concurrency 16 \
+    --save-result \
+    --save-detailed \
+    --result-filename moss_mtd_huaqiang_bench.json
+
+
+export AUDIO=/root/vllm-workspace/huaqiang.wav
+
+curl -s http://localhost:8123/v1/audio/transcriptions \
+-H "Authorization: Bearer EMPTY" \
+-F model="moss-mtd" \
+-F file=@"$AUDIO" \
+-F response_format="json" \
+-F temperature="0" \
+| jq
+
+vllm bench serve \
+    --backend openai-chat \
+    --endpoint /v1/chat/completions \
+    --host 127.0.0.1 \
+    --port 8123 \
+    --model mtd \
+    --served-model-name mtd \
+    --dataset-name custom_audio \
+    --dataset-path /root/vllm-workspace/mtd_bench.jsonl \
+    --enable-multimodal-chat \
+    --num-prompts 150 \
+    --request-rate inf \
+    --max-concurrency 5 \
+    --custom-output-len 1024 \
+    --temperature 0 \
+    --save-result \
+    --result-dir /root/vllm-workspace/bench-results
+
+============ Serving Benchmark Result ============
+Successful requests:                     150
+Failed requests:                         0
+Maximum request concurrency:             16
+Benchmark duration (s):                  40.26
+Total input tokens:                      229200
+Total generated tokens:                  131826
+Request throughput (req/s):              3.73
+Output token throughput (tok/s):         3274.67
+Peak output token throughput (tok/s):    4272.00
+Peak concurrent requests:                25.00
+Total token throughput (tok/s):          8968.19
+---------------Time to First Token----------------
+Mean TTFT (ms):                          846.78
+Median TTFT (ms):                        696.74
+P99 TTFT (ms):                           2244.47
+-----Time per Output Token (excl. 1st token)------
+Mean TPOT (ms):                          3.69
+Median TPOT (ms):                        3.81
+P99 TPOT (ms):                           4.15
+---------------Inter-token Latency----------------
+Mean ITL (ms):                           4.12
+Median ITL (ms):                         3.74
+P99 ITL (ms):                            55.37
+==================================================
