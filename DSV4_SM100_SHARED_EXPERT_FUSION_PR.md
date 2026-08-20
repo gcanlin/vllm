@@ -13,8 +13,9 @@ retains the checkpoint's FP8 shared weights and produces one BF16 output store.
 
 On 8x B200 with DeepSeek-V4-Flash-0731, the change improves end-to-end output
 throughput by 9.44% for a balanced 1K/128 workload and by 6.55% for an 8K/32
-prefill-heavy workload. GSM8K accuracy is unchanged within measurement noise
-(83.0% to 83.5%, 200 deterministic examples).
+prefill-heavy workload. At batch size 1, it improves decode-heavy throughput by
+14.98% and 1K/128 throughput by 13.68%. GSM8K accuracy is unchanged within
+measurement noise (83.0% to 83.5%, 200 deterministic examples).
 
 ## Motivation and prior art
 
@@ -120,6 +121,34 @@ vllm serve /mnt/models/deepseek-ai/DeepSeek-V4-Flash-0731 \
 The baseline adds
 `VLLM_DISABLE_DSV4_MEGAMOE_SHARED_EXPERT_FUSION=1`; the optimized run uses the
 default.
+
+### Batch-size-1 latency and throughput
+
+This follow-up benchmark holds `--max-concurrency 1`, so the engine has exactly
+one active request. Each entry is the mean of three paired runs (seeds 2031,
+2032, and 2033), with eight measured requests per run, two warmup requests,
+temperature 0, and `ignore_eos`.
+
+| Workload and metric | Baseline | Fused | Change |
+| --- | ---: | ---: | ---: |
+| 128 input / 256 output: output throughput | 130.02 tok/s | 149.50 tok/s | **+14.98%** |
+| 128 input / 256 output: mean TPOT | 7.653 ms | 6.643 ms | **-13.19%** |
+| 128 input / 256 output: median ITL | 7.577 ms | 6.567 ms | **-13.32%** |
+| 128 input / 256 output: mean TTFT | 17.32 ms | 18.17 ms | +4.93% |
+| 1024 input / 128 output: output throughput | 125.19 tok/s | 142.32 tok/s | **+13.68%** |
+| 1024 input / 128 output: mean TPOT | 7.158 ms | 6.295 ms | **-12.07%** |
+| 1024 input / 128 output: median ITL | 7.090 ms | 6.223 ms | **-12.23%** |
+| 1024 input / 128 output: mean TTFT | 113.13 ms | 99.81 ms | **-11.77%** |
+
+The per-seed throughput gains were 15.00%, 14.95%, and 14.99% for the
+decode-heavy workload and 13.66%, 13.71%, and 13.67% for the 1K/128 workload.
+All 48 measured requests in each variant completed successfully.
+
+The 128-token prompts are shorter than the 256-token cache block and had a 0%
+prefix-cache hit rate. For the 1K prompts, the benchmark client's validation
+and warmup requests repeat a subset of measured prompts, creating the same
+matched cache pattern before and after; those TTFT values should therefore be
+read as paired serving measurements rather than cold-prefill latency.
 
 ### Balanced workload: 128 requests, 1024 input, 128 output, concurrency 64
 

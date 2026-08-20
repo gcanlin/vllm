@@ -12,6 +12,7 @@ persistent MegaMoE kernel 内，与 FP4 routed experts 在同一个原生调度�
 
 - 1K 输入 / 128 输出的均衡负载：输出吞吐提升 **9.44%**。
 - 8K 输入 / 32 输出的 prefill-heavy 负载：输出吞吐提升 **6.55%**。
+- Batch size 1：decode-heavy 吞吐提升 **14.98%**，1K/128 提升 **13.68%**。
 - GSM8K 固定 200 题：83.0% -> 83.5%，没有可测量的精度回退。
 - 模型加载显存仅增加 0.03 GiB/卡，KV 容量降低 0.10%。
 - FULL_AND_PIECEWISE CUDA Graph 的 1 到 256 batch capture 均成功。
@@ -203,7 +204,33 @@ baseline 增加 rollback 环境变量，after 使用默认开启的 native fusio
 随机 prompt，避免 prefix cache 污染。首轮冷启动和重复同种子的缓存命中结果没有纳入
 统计。
 
-### 6.2 均衡负载
+### 6.2 Batch size 1
+
+补充测试使用 `--max-concurrency 1`，保证 engine 同一时刻只有一个 active request。
+每个结果是随机种子 2031、2032、2033 三次配对测试的平均值；每次 8 个有效请求、2 个
+warmup，temperature 0 且 `ignore_eos`。
+
+| 负载与指标 | Before | After | 变化 |
+| --- | ---: | ---: | ---: |
+| 128 in / 256 out：output throughput | 130.02 tok/s | 149.50 tok/s | **+14.98%** |
+| 128 in / 256 out：mean TPOT | 7.653 ms | 6.643 ms | **-13.19%** |
+| 128 in / 256 out：median ITL | 7.577 ms | 6.567 ms | **-13.32%** |
+| 128 in / 256 out：mean TTFT | 17.32 ms | 18.17 ms | +4.93% |
+| 1024 in / 128 out：output throughput | 125.19 tok/s | 142.32 tok/s | **+13.68%** |
+| 1024 in / 128 out：mean TPOT | 7.158 ms | 6.295 ms | **-12.07%** |
+| 1024 in / 128 out：median ITL | 7.090 ms | 6.223 ms | **-12.23%** |
+| 1024 in / 128 out：mean TTFT | 113.13 ms | 99.81 ms | **-11.77%** |
+
+decode-heavy 三个配对种子的吞吐提升分别为 +15.00%、+14.95%、+14.99%；1K/128
+分别为 +13.66%、+13.71%、+13.67%。before 和 after 各 48 个有效请求全部成功。
+
+128-token prompt 小于 256-token cache block，服务日志确认 prefix-cache hit rate 为 0%。
+1K prompt 中，benchmark client 的 validation/warmup 会重复部分正式 prompt，因此两边
+具有相同的匹配 cache 模式；这组 TTFT 应理解为配对 serving 结果，而不是纯 cold-prefill
+延迟。128/256 的 decode TPOT、ITL 和 throughput 不受该说明影响；1K/128 主要看
+before/after 的同条件相对变化。
+
+### 6.3 均衡负载
 
 参数：128 个请求，精确 1024 input tokens、128 output tokens，最大并发 64。
 
@@ -217,7 +244,7 @@ baseline 增加 rollback 环境变量，after 使用默认开启的 native fusio
 
 三个配对种子的吞吐提升分别为 +11.38%、+11.24%、+5.80%，没有负样本。
 
-### 6.3 Prefill-heavy 负载
+### 6.4 Prefill-heavy 负载
 
 参数：32 个请求，精确 8192 input tokens、32 output tokens，最大并发 16。
 
@@ -231,7 +258,7 @@ baseline 增加 rollback 环境变量，after 使用默认开启的 native fusio
 
 三个配对种子的吞吐提升分别为 +2.65%、+7.52%、+9.52%，同样没有负样本。
 
-### 6.4 显存
+### 6.5 显存
 
 | 每卡指标 | Before | After | 变化 |
 | --- | ---: | ---: | ---: |
