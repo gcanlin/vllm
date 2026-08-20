@@ -12,7 +12,7 @@ persistent MegaMoE kernel 内，与 FP4 routed experts 在同一个原生调度�
 
 - 1K 输入 / 128 输出的均衡负载：输出吞吐提升 **9.44%**。
 - 8K 输入 / 32 输出的 prefill-heavy 负载：输出吞吐提升 **6.55%**。
-- Batch size 1：decode-heavy 吞吐提升 **14.98%**，1K/128 提升 **13.68%**。
+- Batch size 1：decode-heavy 吞吐提升 **15.00%**，1K/128 提升 **13.75%**。
 - GSM8K 固定 200 题：83.0% -> 83.5%，没有可测量的精度回退。
 - 模型加载显存仅增加 0.03 GiB/卡，KV 容量降低 0.10%。
 - FULL_AND_PIECEWISE CUDA Graph 的 1 到 256 batch capture 均成功。
@@ -212,23 +212,29 @@ warmup，temperature 0 且 `ignore_eos`。
 
 | 负载与指标 | Before | After | 变化 |
 | --- | ---: | ---: | ---: |
-| 128 in / 256 out：output throughput | 130.02 tok/s | 149.50 tok/s | **+14.98%** |
-| 128 in / 256 out：mean TPOT | 7.653 ms | 6.643 ms | **-13.19%** |
+| 128 in / 256 out：output throughput | 130.02 tok/s | 149.53 tok/s | **+15.00%** |
+| 128 in / 256 out：mean TPOT | 7.653 ms | 6.644 ms | **-13.18%** |
 | 128 in / 256 out：median ITL | 7.577 ms | 6.567 ms | **-13.32%** |
-| 128 in / 256 out：mean TTFT | 17.32 ms | 18.17 ms | +4.93% |
-| 1024 in / 128 out：output throughput | 125.19 tok/s | 142.32 tok/s | **+13.68%** |
-| 1024 in / 128 out：mean TPOT | 7.158 ms | 6.295 ms | **-12.07%** |
-| 1024 in / 128 out：median ITL | 7.090 ms | 6.223 ms | **-12.23%** |
-| 1024 in / 128 out：mean TTFT | 113.13 ms | 99.81 ms | **-11.77%** |
+| 128 in / 256 out：mean TTFT | 17.32 ms | 17.70 ms | +2.18% |
+| 1024 in / 128 out：output throughput | 125.19 tok/s | 142.41 tok/s | **+13.75%** |
+| 1024 in / 128 out：mean TPOT | 7.158 ms | 6.294 ms | **-12.07%** |
+| 1024 in / 128 out：median ITL | 7.090 ms | 6.221 ms | **-12.25%** |
+| 1024 in / 128 out：mean TTFT | 113.13 ms | 99.36 ms | **-12.17%** |
 
-decode-heavy 三个配对种子的吞吐提升分别为 +15.00%、+14.95%、+14.99%；1K/128
-分别为 +13.66%、+13.71%、+13.67%。before 和 after 各 48 个有效请求全部成功。
+decode-heavy 三个配对种子的吞吐提升分别为 +15.01%、+14.99%、+15.01%；1K/128
+分别为 +13.82%、+13.72%、+13.72%。before 和 after 各 48 个有效请求全部成功。
 
 128-token prompt 小于 256-token cache block，服务日志确认 prefix-cache hit rate 为 0%。
 1K prompt 中，benchmark client 的 validation/warmup 会重复部分正式 prompt，因此两边
 具有相同的匹配 cache 模式；这组 TTFT 应理解为配对 serving 结果，而不是纯 cold-prefill
 延迟。128/256 的 decode TPOT、ITL 和 throughput 不受该说明影响；1K/128 主要看
 before/after 的同条件相对变化。
+
+三个 fused seed 的未编辑 benchmark-client stdout 已直接提交：
+[128/256 client log](benchmarks/results/dsv4_sm100_shared_expert_fusion/fused-b1-decode.log)
+和 [1024/128 client log](benchmarks/results/dsv4_sm100_shared_expert_fusion/fused-b1-balanced.log)。
+日志保留 `vllm bench serve` 输出的完整参数 Namespace、warmup 状态、成功/失败请求数、
+实际 token 数以及最终吞吐和延迟，不包含人工整理后的 baseline 日志。
 
 ### 6.3 均衡负载
 

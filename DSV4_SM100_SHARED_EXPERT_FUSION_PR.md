@@ -14,7 +14,7 @@ retains the checkpoint's FP8 shared weights and produces one BF16 output store.
 On 8x B200 with DeepSeek-V4-Flash-0731, the change improves end-to-end output
 throughput by 9.44% for a balanced 1K/128 workload and by 6.55% for an 8K/32
 prefill-heavy workload. At batch size 1, it improves decode-heavy throughput by
-14.98% and 1K/128 throughput by 13.68%. GSM8K accuracy is unchanged within
+15.00% and 1K/128 throughput by 13.75%. GSM8K accuracy is unchanged within
 measurement noise (83.0% to 83.5%, 200 deterministic examples).
 
 ## Motivation and prior art
@@ -131,17 +131,17 @@ temperature 0, and `ignore_eos`.
 
 | Workload and metric | Baseline | Fused | Change |
 | --- | ---: | ---: | ---: |
-| 128 input / 256 output: output throughput | 130.02 tok/s | 149.50 tok/s | **+14.98%** |
-| 128 input / 256 output: mean TPOT | 7.653 ms | 6.643 ms | **-13.19%** |
+| 128 input / 256 output: output throughput | 130.02 tok/s | 149.53 tok/s | **+15.00%** |
+| 128 input / 256 output: mean TPOT | 7.653 ms | 6.644 ms | **-13.18%** |
 | 128 input / 256 output: median ITL | 7.577 ms | 6.567 ms | **-13.32%** |
-| 128 input / 256 output: mean TTFT | 17.32 ms | 18.17 ms | +4.93% |
-| 1024 input / 128 output: output throughput | 125.19 tok/s | 142.32 tok/s | **+13.68%** |
-| 1024 input / 128 output: mean TPOT | 7.158 ms | 6.295 ms | **-12.07%** |
-| 1024 input / 128 output: median ITL | 7.090 ms | 6.223 ms | **-12.23%** |
-| 1024 input / 128 output: mean TTFT | 113.13 ms | 99.81 ms | **-11.77%** |
+| 128 input / 256 output: mean TTFT | 17.32 ms | 17.70 ms | +2.18% |
+| 1024 input / 128 output: output throughput | 125.19 tok/s | 142.41 tok/s | **+13.75%** |
+| 1024 input / 128 output: mean TPOT | 7.158 ms | 6.294 ms | **-12.07%** |
+| 1024 input / 128 output: median ITL | 7.090 ms | 6.221 ms | **-12.25%** |
+| 1024 input / 128 output: mean TTFT | 113.13 ms | 99.36 ms | **-12.17%** |
 
-The per-seed throughput gains were 15.00%, 14.95%, and 14.99% for the
-decode-heavy workload and 13.66%, 13.71%, and 13.67% for the 1K/128 workload.
+The per-seed throughput gains were 15.01%, 14.99%, and 15.01% for the
+decode-heavy workload and 13.82%, 13.72%, and 13.72% for the 1K/128 workload.
 All 48 measured requests in each variant completed successfully.
 
 The 128-token prompts are shorter than the 256-token cache block and had a 0%
@@ -149,6 +149,13 @@ prefix-cache hit rate. For the 1K prompts, the benchmark client's validation
 and warmup requests repeat a subset of measured prompts, creating the same
 matched cache pattern before and after; those TTFT values should therefore be
 read as paired serving measurements rather than cold-prefill latency.
+
+The unedited fused benchmark-client stdout for all three seeds is checked in:
+[128/256 client log](benchmarks/results/dsv4_sm100_shared_expert_fusion/fused-b1-decode.log)
+and [1024/128 client log](benchmarks/results/dsv4_sm100_shared_expert_fusion/fused-b1-balanced.log).
+Each log retains the complete parsed argument namespace, warmup status,
+successful/failed request counts, token counts, and final latency/throughput
+summary emitted by `vllm bench serve`.
 
 ### Balanced workload: 128 requests, 1024 input, 128 output, concurrency 64
 
