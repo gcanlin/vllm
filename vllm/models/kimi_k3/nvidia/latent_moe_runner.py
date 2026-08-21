@@ -315,6 +315,38 @@ class LatentMoERunner(MoERunner):
             else 0,
         )
 
+        return self._finish_fused_forward(
+            result, og_hidden_dim_pre_xform, og_hidden_dim_post_xform
+        )
+
+    def forward_prequantized(
+        self,
+        hidden_states: torch.Tensor,
+        hidden_states_scale: torch.Tensor,
+        router_logits: torch.Tensor,
+        shared_experts_input: torch.Tensor,
+    ) -> torch.Tensor:
+        if not self._use_fused_path() or not self.supports_prequantized_input():
+            raise ValueError("K3 latent MoE does not support prequantized input.")
+        result = torch.ops.vllm.moe_forward_prequantized_shared(
+            hidden_states,
+            hidden_states_scale,
+            router_logits,
+            shared_experts_input,
+            None,
+            self._encode_layer_name(),
+            self.moe_config.hidden_dim_unpadded
+            if self._quant_method.has_unpadded_output
+            else 0,
+        )
+        return self._finish_fused_forward(result, None, None)
+
+    def _finish_fused_forward(
+        self,
+        result: torch.Tensor | tuple[torch.Tensor, torch.Tensor],
+        og_hidden_dim_pre_xform: int | None,
+        og_hidden_dim_post_xform: int | None,
+    ) -> torch.Tensor:
         shared_output, fused_output = _unpack(result)
         assert shared_output is not None
 

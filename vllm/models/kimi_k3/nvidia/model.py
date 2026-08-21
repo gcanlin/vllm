@@ -719,6 +719,19 @@ class KimiMoE(nn.Module):
                 is_sequence_parallel=use_sequence_parallel,
                 runner_cls=LatentMoERunner if self.use_latent_moe else None,
             )
+        self._routed_down_mxfp8_op = None
+        if (
+            self.use_latent_moe
+            and not self.use_mega_moe
+            and envs.VLLM_KIMI_K3_ROUTED_DOWN_MXFP8
+            and current_platform.is_cuda()
+            and current_platform.is_device_capability_family(100)
+        ):
+            from vllm.models.kimi_k3.nvidia.ops.cute_dsl.routed_down_mxfp8 import (
+                KimiK3RoutedDownMxfp8Op,
+            )
+
+            self._routed_down_mxfp8_op = KimiK3RoutedDownMxfp8Op()
         if self.padded_moe_intermediate_size != moe_intermediate_size:
             w13_weight = getattr(self.experts, "w13_weight", None)
             if w13_weight is None:
@@ -736,7 +749,12 @@ class KimiMoE(nn.Module):
 
     def _maybe_overlap_router_and_down_proj(
         self, hidden_states: torch.Tensor
-    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor | None]:
+    ) -> tuple[
+        torch.Tensor,
+        torch.Tensor | None,
+        torch.Tensor,
+        torch.Tensor | None,
+    ]:
         """Compute the routed-expert down projection alongside the router,
         overlapping them on separate CUDA streams when latent MoE is enabled.
 
@@ -747,12 +765,13 @@ class KimiMoE(nn.Module):
         on the default stream and overlaps the down projection.
 
         Returns:
-            ``(routed_hidden_states, router_output, topk_ids)``.
+            ``(routed_hidden_states, routed_scale, router_output, topk_ids)``.
             ``routed_hidden_states`` is the down-projected latent (or the
             original ``hidden_states`` when latent MoE is disabled). For MegaMoE
             ``router_output`` holds the grouped top-k weights and ``topk_ids``
             the selected experts; otherwise ``router_output`` holds the raw gate
-            logits and ``topk_ids`` is ``None``.
+            logits and ``topk_ids`` is ``None``. ``routed_scale`` is present only
+            when the projection produced non-swizzled MXFP8 directly.
         """
 
         def _router(
@@ -776,12 +795,25 @@ class KimiMoE(nn.Module):
         down_proj = self.routed_expert_down_proj
         if down_proj is None:
             router_output, topk_ids = _router(hidden_states)
-            return hidden_states, router_output, topk_ids
+            return hidden_states, None, router_output, topk_ids
         num_tokens = hidden_states.shape[0]
-        (router_output, topk_ids), (routed_hidden_states, _) = (
+        use_fused_quant = (
+            self._routed_down_mxfp8_op is not None
+            and self.experts.supports_prequantized_mxfp8_input()
+            and self._routed_down_mxfp8_op.can_run(hidden_states, down_proj.weight)
+        )
+
+        def _down_projection() -> tuple[torch.Tensor, torch.Tensor | None]:
+            if use_fused_quant:
+                assert self._routed_down_mxfp8_op is not None
+                return self._routed_down_mxfp8_op(hidden_states, down_proj.weight)
+            routed_hidden_states, _ = down_proj(hidden_states)
+            return routed_hidden_states, None
+
+        (router_output, topk_ids), (routed_hidden_states, routed_scale) = (
             maybe_execute_in_parallel(
                 lambda: _router(hidden_states),
-                lambda: down_proj(hidden_states),
+                _down_projection,
                 self._down_proj_events[0],
                 self._down_proj_events[1],
                 self._down_proj_stream
@@ -789,7 +821,7 @@ class KimiMoE(nn.Module):
                 else None,
             )
         )
-        return routed_hidden_states, router_output, topk_ids
+        return routed_hidden_states, routed_scale, router_output, topk_ids
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         num_tokens, hidden_size = hidden_states.shape
@@ -797,7 +829,7 @@ class KimiMoE(nn.Module):
         # Overlap the gate with the routed down projection; the returned hidden
         # states are already down-projected. Keep the original ``hidden_states``
         # for the shared experts.
-        routed_hidden_states, router_output, topk_ids = (
+        routed_hidden_states, routed_scale, router_output, topk_ids = (
             self._maybe_overlap_router_and_down_proj(hidden_states)
         )
         if self.use_mega_moe:
@@ -823,11 +855,19 @@ class KimiMoE(nn.Module):
             # Routed experts consume the down-projected latent; shared experts
             # (inside MoERunner) get the original hidden states via
             # shared_experts_input.
-            final_hidden_states = self.experts(
-                hidden_states=routed_hidden_states,
-                router_logits=router_output,
-                shared_experts_input=hidden_states,
-            )
+            if routed_scale is None:
+                final_hidden_states = self.experts(
+                    hidden_states=routed_hidden_states,
+                    router_logits=router_output,
+                    shared_experts_input=hidden_states,
+                )
+            else:
+                final_hidden_states = self.experts.forward_prequantized(
+                    hidden_states=routed_hidden_states,
+                    hidden_states_scale=routed_scale,
+                    router_logits=router_output,
+                    shared_experts_input=hidden_states,
+                )
         return final_hidden_states.view(num_tokens, hidden_size)
 
 

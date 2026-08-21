@@ -187,6 +187,40 @@ def _moe_forward_shared_fake(
     return shared_out, fused_out
 
 
+def _moe_forward_prequantized_shared(
+    hidden_states: torch.Tensor,
+    hidden_states_scale: torch.Tensor,
+    router_logits: torch.Tensor,
+    shared_experts_input: torch.Tensor,
+    input_ids: torch.Tensor | None,
+    layer_name: _layer_name_type,
+    hidden_dim_unpadded: int,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    layer = get_layer_from_name(_resolve_layer_name(layer_name))
+    return layer._forward_impl_prequantized(  # type: ignore[attr-defined]
+        hidden_states,
+        hidden_states_scale,
+        router_logits,
+        shared_experts_input,
+        input_ids,
+    )
+
+
+def _moe_forward_prequantized_shared_fake(
+    hidden_states: torch.Tensor,
+    hidden_states_scale: torch.Tensor,
+    router_logits: torch.Tensor,
+    shared_experts_input: torch.Tensor,
+    input_ids: torch.Tensor | None,
+    layer_name: _layer_name_type,
+    hidden_dim_unpadded: int,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    del hidden_states_scale, router_logits, input_ids, layer_name
+    fused_dim = hidden_dim_unpadded or hidden_states.shape[-1]
+    fused_out = shared_experts_input.new_empty((*hidden_states.shape[:-1], fused_dim))
+    return torch.empty_like(shared_experts_input), fused_out
+
+
 # NOTE: `moe_forward` and `moe_forward_shared` being opaque custom ops is a
 # load-bearing assumption for the MoE-LoRA dual-stream path.
 direct_register_custom_op(
@@ -194,6 +228,14 @@ direct_register_custom_op(
     op_func=_moe_forward,
     mutates_args=["hidden_states"],
     fake_impl=_moe_forward_fake,
+    tags=(torch.Tag.needs_fixed_stride_order,),
+)
+
+
+direct_register_custom_op(
+    op_name="moe_forward_prequantized_shared",
+    op_func=_moe_forward_prequantized_shared,
+    fake_impl=_moe_forward_prequantized_shared_fake,
     tags=(torch.Tag.needs_fixed_stride_order,),
 )
 
@@ -281,13 +323,16 @@ class MoERunner(MoERunnerInterface):
                 mk_can_overlap_shared_experts=can_overlap,
             )
 
+        vllm_config = get_current_vllm_config()
+        self._lora_configured = vllm_config.lora_config is not None
+
         # Needed for string -> MoERunner layer lookup in custom ops.
         self.layer_name = layer_name
 
         self._forward_entry = self._select_forward()
 
         # For smuggling this layer into the fused moe custom op
-        register_layer_for_moe_forward_op(get_current_vllm_config(), self)
+        register_layer_for_moe_forward_op(vllm_config, self)
 
     def load_weights(
         self, weights: Iterable[tuple[str, torch.Tensor]]
@@ -618,6 +663,62 @@ class MoERunner(MoERunnerInterface):
             fused_out,
         )
 
+    def supports_prequantized_input(self) -> bool:
+        return (
+            self._shared_experts is not None
+            and self.gate is None
+            and not self.enable_dbo
+            and not self.do_naive_dispatch_combine
+            and self.moe_config.pcp_size == 1
+            and not self._lora_configured
+            and self.routed_experts.supports_prequantized_input()
+        )
+
+    @torch.compiler.assume_constant_result
+    def supports_prequantized_mxfp8_input(self) -> bool:
+        if not self.supports_prequantized_input():
+            return False
+        self.routed_experts._ensure_moe_quant_config_init()
+        quant_config = self._quant_method.moe_quant_config
+        return (
+            quant_config is not None
+            and quant_config.quant_dtype == "mxfp8"
+            and not quant_config.is_scale_swizzled
+        )
+
+    def _apply_quant_method_prequantized(
+        self,
+        hidden_states: torch.Tensor,
+        hidden_states_scale: torch.Tensor,
+        router_logits: torch.Tensor,
+        shared_experts_input: torch.Tensor,
+        input_ids: torch.Tensor | None,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        self._maybe_apply_shared_experts(
+            shared_experts_input, SharedExpertsOrder.NO_OVERLAP
+        )
+        topk_weights, topk_ids = self.router.select_experts(
+            hidden_states=hidden_states,
+            router_logits=router_logits,
+            topk_indices_dtype=self._quant_method.topk_indices_dtype,
+            input_ids=input_ids,
+        )
+        fused_out = self.routed_experts.forward_modular_prequantized(
+            x=hidden_states,
+            x_scale=hidden_states_scale,
+            output_dtype=shared_experts_input.dtype,
+            topk_weights=topk_weights,
+            topk_ids=topk_ids,
+            shared_experts=self._shared_experts,
+            shared_experts_input=shared_experts_input,
+        )
+        self._maybe_apply_shared_experts(
+            shared_experts_input,
+            SharedExpertsOrder.MULTI_STREAM_OVERLAPPED,
+        )
+        assert self._shared_experts is not None
+        return self._shared_experts.output, fused_out
+
     def _sequence_parallel_context(self):
         """Return a context manager for sequence-parallel token
         redistribution.
@@ -882,6 +983,31 @@ class MoERunner(MoERunnerInterface):
                 shared_output,
                 hidden_states,
             )
+
+    def _forward_impl_prequantized(
+        self,
+        hidden_states: torch.Tensor,
+        hidden_states_scale: torch.Tensor,
+        router_logits: torch.Tensor,
+        shared_experts_input: torch.Tensor,
+        input_ids: torch.Tensor | None = None,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        self.routed_experts._ensure_moe_quant_config_init()
+        if not self.supports_prequantized_input():
+            raise ValueError("This MoE runner does not support prequantized input.")
+        self._maybe_sync_shared_experts_stream(shared_experts_input)
+        with self._sequence_parallel_context():
+            shared_output, fused_output = self._apply_quant_method_prequantized(
+                hidden_states,
+                hidden_states_scale,
+                router_logits,
+                shared_experts_input,
+                input_ids,
+            )
+            result = self._maybe_combine(shared_output, fused_output)
+        if not isinstance(result, tuple):
+            raise AssertionError("Prequantized shared MoE must return two outputs.")
+        return result
 
     #########################################################
     #

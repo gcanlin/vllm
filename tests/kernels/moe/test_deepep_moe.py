@@ -19,6 +19,7 @@ from vllm.model_executor.layers.fused_moe import TritonExperts
 from vllm.model_executor.layers.fused_moe.activation import MoEActivation
 from vllm.model_executor.layers.fused_moe.config import (
     FusedMoEQuantConfig,
+    FusedMoEQuantDesc,
 )
 from vllm.model_executor.layers.fused_moe.experts.fused_batched_moe import (
     BatchedTritonExperts,
@@ -28,7 +29,7 @@ from vllm.model_executor.layers.quantization.utils.fp8_utils import (
     per_token_group_quant_fp8,
 )
 from vllm.platforms import current_platform
-from vllm.utils.import_utils import has_deep_ep
+from vllm.utils.import_utils import has_deep_ep, has_deep_ep_v2
 from vllm.utils.torch_utils import set_random_seed
 from vllm.v1.worker.workspace import init_workspace_manager
 
@@ -45,10 +46,145 @@ if has_deep_ep():
 
     from .parallel_utils import DeepEPHTArgs, DeepEPLLArgs, make_deepep_a2a
 
+if has_deep_ep_v2():
+    from vllm.model_executor.layers.fused_moe.prepare_finalize.deepep_v2 import (
+        DeepEPV2PrepareAndFinalize,
+    )
+
 requires_deep_ep = pytest.mark.skipif(
     not has_deep_ep(),
     reason="Requires deep_ep kernels",
 )
+
+
+def _mxfp8_quant_config() -> FusedMoEQuantConfig:
+    return FusedMoEQuantConfig(
+        _a1=FusedMoEQuantDesc("mxfp8"),
+        _a2=FusedMoEQuantDesc("mxfp8"),
+        _w1=FusedMoEQuantDesc("mxfp4"),
+        _w2=FusedMoEQuantDesc("mxfp4"),
+        is_scale_swizzled=False,
+        mx_alignment=256,
+    )
+
+
+@pytest.mark.parametrize(
+    "prepare_finalize_cls",
+    [
+        pytest.param(
+            DeepEPHTPrepareAndFinalize if has_deep_ep() else None,
+            marks=pytest.mark.skipif(not has_deep_ep(), reason="Requires deep_ep"),
+            id="deepep_ht",
+        ),
+        pytest.param(
+            DeepEPV2PrepareAndFinalize if has_deep_ep_v2() else None,
+            marks=pytest.mark.skipif(
+                not has_deep_ep_v2(), reason="Requires deep_ep_v2"
+            ),
+            id="deepep_v2",
+        ),
+    ],
+)
+def test_deepep_prequantized_mxfp8_skips_input_quantization(
+    prepare_finalize_cls, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Prequantized values and scales must go directly to dispatch."""
+    values = torch.empty((2, 3584), dtype=torch.float8_e4m3fn)
+    scales = torch.empty((2, 112), dtype=torch.uint8)
+    topk_ids = torch.zeros((2, 1), dtype=torch.int64)
+    topk_weights = torch.ones((2, 1), dtype=torch.float32)
+    captured = {}
+
+    def fake_dispatch(self, **kwargs):
+        captured.update(kwargs)
+        return lambda: (
+            kwargs["tokens"],
+            kwargs["token_scales"],
+            None,
+            None,
+            None,
+        )
+
+    monkeypatch.setattr(prepare_finalize_cls, "_do_dispatch", fake_dispatch)
+    prepare_finalize = object.__new__(prepare_finalize_cls)
+    receiver = prepare_finalize.prepare_prequantized_async(
+        values,
+        scales,
+        topk_weights,
+        topk_ids,
+        num_experts=64,
+        expert_map=None,
+        apply_router_weight_on_input=False,
+        quant_config=_mxfp8_quant_config(),
+    )
+
+    assert callable(receiver)
+    assert captured["tokens"] is values
+    assert captured["token_scales"].dtype == torch.int32
+    assert captured["token_scales"].data_ptr() == scales.data_ptr()
+    assert captured["defer_input_quant"] is True
+    _, received_scales, _, _, _ = receiver()
+    assert received_scales is not None
+    assert received_scales.dtype == torch.uint8
+    assert received_scales.shape == scales.shape
+    assert received_scales.data_ptr() == scales.data_ptr()
+
+
+def _deepep_prequantized_mxfp8_dispatch(pgi: ProcessGroupInfo) -> None:
+    init_workspace_manager(pgi.device)
+    pg = torch.distributed.new_group(list(range(pgi.world_size)))
+    prepare_finalize = make_deepep_a2a(
+        pg=pg,
+        pgi=pgi,
+        dp_size=1,
+        deepep_ht_args=DeepEPHTArgs(num_local_experts=1),
+        deepep_ll_args=None,
+    )
+
+    row_codes = torch.arange(
+        pgi.rank * 2 + 1,
+        pgi.rank * 2 + 3,
+        dtype=torch.uint8,
+        device=pgi.device,
+    )
+    values = row_codes.to(torch.float8_e4m3fn).view(2, 1).expand(2, 3584).contiguous()
+    scales = row_codes.view(2, 1).expand(2, 112).contiguous()
+    topk_ids = torch.zeros((2, 1), dtype=torch.int64, device=pgi.device)
+    topk_weights = torch.ones((2, 1), dtype=torch.float32, device=pgi.device)
+
+    receiver = prepare_finalize.prepare_prequantized_async(
+        values,
+        scales,
+        topk_weights,
+        topk_ids,
+        num_experts=2,
+        expert_map=None,
+        apply_router_weight_on_input=False,
+        quant_config=_mxfp8_quant_config(),
+    )
+    received_values, received_scales, _, _, _ = receiver()
+    assert received_scales is not None
+
+    if pgi.rank == 0:
+        received_codes = received_scales[:, 0].sort().values
+        expected_codes = torch.arange(1, 5, dtype=torch.uint8, device=pgi.device)
+        torch.testing.assert_close(received_codes, expected_codes, rtol=0, atol=0)
+        for code in expected_codes:
+            row = (received_scales[:, 0] == code).nonzero().item()
+            assert torch.all(received_scales[row] == code)
+            assert torch.all(received_values[row] == code.to(torch.float8_e4m3fn))
+    else:
+        assert received_values.numel() == 0
+        assert received_scales.numel() == 0
+    torch.distributed.barrier(group=pg)
+
+
+@multi_gpu_test(num_gpus=2)
+@requires_deep_ep
+def test_deepep_prequantized_mxfp8_dispatch_preserves_bytes() -> None:
+    """DeepEP must preserve row-major UE8M0 bytes across dispatch."""
+    parallel_launch(2, _deepep_prequantized_mxfp8_dispatch)
+
 
 MAX_TOKENS_PER_RANK = 64
 

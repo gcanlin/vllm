@@ -173,6 +173,45 @@ PrepareMonolithicResultType = tuple[
 
 ReceiverType = Callable[[], PrepareResultType]
 
+
+def validate_prequantized_mxfp8_input(
+    values: torch.Tensor,
+    scales: torch.Tensor,
+    apply_router_weight_on_input: bool,
+    quant_config: FusedMoEQuantConfig,
+) -> None:
+    """Validate non-swizzled MXFP8 input accepted by DeepEP dispatch."""
+    if apply_router_weight_on_input:
+        raise ValueError(
+            "Prequantized MoE input cannot apply router weights before dispatch."
+        )
+    if quant_config.quant_dtype != "mxfp8":
+        raise ValueError("Prequantized DeepEP input requires MXFP8 activations.")
+    if quant_config.is_scale_swizzled:
+        raise ValueError("Prequantized DeepEP input requires row-major scales.")
+    if values.ndim != 2 or values.dtype != torch.float8_e4m3fn:
+        raise ValueError("MXFP8 values must be a 2D E4M3FN tensor.")
+    if scales.ndim != 2 or scales.dtype != torch.uint8:
+        raise ValueError("MXFP8 scales must be a 2D uint8 tensor.")
+    alignment = quant_config.mx_alignment
+    hidden_dim = values.shape[1]
+    padded_dim = (
+        (hidden_dim + alignment - 1) // alignment * alignment
+        if alignment > 0
+        else hidden_dim
+    )
+    expected_scale_shape = (values.shape[0], padded_dim // 32)
+    if scales.shape != expected_scale_shape:
+        raise ValueError(
+            f"MXFP8 scales must have shape {expected_scale_shape}, "
+            f"got {tuple(scales.shape)}."
+        )
+    if values.device != scales.device:
+        raise ValueError("MXFP8 values and scales must be on the same device.")
+    if not values.is_contiguous() or not scales.is_contiguous():
+        raise ValueError("MXFP8 values and scales must be contiguous.")
+
+
 ################################################################################
 # Prepare/Finalize
 ################################################################################
@@ -349,6 +388,23 @@ class FusedMoEPrepareAndFinalizeModular(FusedMoEPrepareAndFinalize):
 
         a, a_scales, expert_meta, topk_ids, topk_weights = obj.prepare(...)
         """
+        raise NotImplementedError
+
+    def supports_prequantized_input(self) -> bool:
+        """Whether prepare can dispatch caller-provided block-quantized input."""
+        return False
+
+    def prepare_prequantized_async(
+        self,
+        a1q: torch.Tensor,
+        a1q_scale: torch.Tensor,
+        topk_weights: torch.Tensor,
+        topk_ids: torch.Tensor,
+        num_experts: int,
+        expert_map: torch.Tensor | None,
+        apply_router_weight_on_input: bool,
+        quant_config: FusedMoEQuantConfig,
+    ) -> tuple[Callable, ReceiverType] | ReceiverType:
         raise NotImplementedError
 
     @abstractmethod
@@ -1275,6 +1331,57 @@ class FusedMoEKernelModularImpl:
 
         return a1q, a1q_scale, expert_tokens_meta, topk_ids, topk_weights
 
+    def _prepare_prequantized(
+        self,
+        hidden_states: torch.Tensor,
+        hidden_states_scale: torch.Tensor,
+        topk_weights: torch.Tensor,
+        topk_ids: torch.Tensor,
+        global_num_experts: int,
+        expert_map: torch.Tensor | None,
+        apply_router_weight_on_input: bool,
+    ) -> tuple[
+        torch.Tensor,
+        torch.Tensor | None,
+        ExpertTokensMetadata | None,
+        torch.Tensor,
+        torch.Tensor,
+    ]:
+        assert self.prepare_finalize.supports_prequantized_input()
+        dbo_maybe_run_recv_hook()
+        prepare_ret = self.prepare_finalize.prepare_prequantized_async(
+            hidden_states,
+            hidden_states_scale,
+            topk_weights,
+            topk_ids,
+            global_num_experts,
+            expert_map,
+            apply_router_weight_on_input,
+            self.fused_experts.quant_config,
+        )
+        hook, receiver = (
+            prepare_ret if isinstance(prepare_ret, tuple) else (None, prepare_ret)
+        )
+        if hook is not None:
+            if dbo_enabled():
+                dbo_register_recv_hook(hook)
+                dbo_yield()
+            else:
+                hook()
+
+        (
+            a1q,
+            a1q_scale,
+            expert_tokens_meta,
+            expert_topk_ids,
+            expert_topk_weights,
+        ) = receiver()
+        if expert_topk_ids is not None:
+            topk_ids = expert_topk_ids
+        if expert_topk_weights is not None:
+            topk_weights = expert_topk_weights
+        return a1q, a1q_scale, expert_tokens_meta, topk_ids, topk_weights
+
     def _fused_experts(
         self,
         in_dtype: torch.dtype,
@@ -1440,6 +1547,8 @@ class FusedMoEKernelModularImpl:
         apply_router_weight_on_input: bool = False,
         shared_experts: SharedExperts | None = None,
         shared_experts_input: torch.Tensor | None = None,
+        hidden_states_scale: torch.Tensor | None = None,
+        output_dtype: torch.dtype | None = None,
     ) -> torch.Tensor:
         """
         This function computes a Mixture of Experts (MoE) layer using two sets
@@ -1469,30 +1578,46 @@ class FusedMoEKernelModularImpl:
         Returns:
         - torch.Tensor: The output tensor after applying the MoE layer.
         """
-        output = torch.empty_like(hidden_states)
+        output_dtype = hidden_states.dtype if output_dtype is None else output_dtype
+        output = torch.empty_like(hidden_states, dtype=output_dtype)
 
         local_num_experts = w1.shape[0]
         if global_num_experts == -1:
             global_num_experts = local_num_experts
 
-        a1q, a1q_scale, expert_tokens_meta, topk_ids, topk_weights = self._prepare(
-            hidden_states,
-            topk_weights,
-            topk_ids,
-            global_num_experts,
-            expert_map,
-            apply_router_weight_on_input,
-        )
+        if hidden_states_scale is None:
+            a1q, a1q_scale, expert_tokens_meta, topk_ids, topk_weights = self._prepare(
+                hidden_states,
+                topk_weights,
+                topk_ids,
+                global_num_experts,
+                expert_map,
+                apply_router_weight_on_input,
+            )
+        else:
+            a1q, a1q_scale, expert_tokens_meta, topk_ids, topk_weights = (
+                self._prepare_prequantized(
+                    hidden_states,
+                    hidden_states_scale,
+                    topk_weights,
+                    topk_ids,
+                    global_num_experts,
+                    expert_map,
+                    apply_router_weight_on_input,
+                )
+            )
 
         # Stash the original unquantized hidden states on the LoRA context
         # so apply_w13_lora sees correct-magnitude activations instead of
         # the potentially quantized values produced by _prepare().
         lora_ctx = getattr(self.fused_experts, "_lora_context", None)
+        if hidden_states_scale is not None and lora_ctx is not None:
+            raise ValueError("Prequantized MoE input does not support LoRA.")
         if lora_ctx is not None:
             lora_ctx.original_hidden_states = hidden_states
 
         fused_out = self._fused_experts(
-            in_dtype=hidden_states.dtype,
+            in_dtype=output_dtype,
             a1q=a1q,
             a1q_scale=a1q_scale,
             w1=w1,
@@ -1628,6 +1753,13 @@ class FusedMoEKernel:
             return False
 
     @property
+    def can_accept_prequantized_input(self) -> bool:
+        return (
+            isinstance(self.impl, FusedMoEKernelModularImpl)
+            and self.impl.prepare_finalize.supports_prequantized_input()
+        )
+
+    @property
     def is_monolithic(self) -> bool:
         return isinstance(self.impl, FusedMoEKernelMonolithicImpl)
 
@@ -1713,6 +1845,44 @@ class FusedMoEKernel:
         assert isinstance(self.impl, FusedMoEKernelModularImpl)
         return self.impl.apply(
             hidden_states=hidden_states,
+            w1=w1,
+            w2=w2,
+            topk_weights=topk_weights,
+            topk_ids=topk_ids,
+            activation=activation,
+            global_num_experts=global_num_experts,
+            expert_map=expert_map,
+            apply_router_weight_on_input=apply_router_weight_on_input,
+            shared_experts=shared_experts,
+            shared_experts_input=shared_experts_input,
+        )
+
+    def apply_prequantized(
+        self,
+        hidden_states: torch.Tensor,
+        hidden_states_scale: torch.Tensor,
+        output_dtype: torch.dtype,
+        w1: torch.Tensor,
+        w2: torch.Tensor,
+        topk_weights: torch.Tensor,
+        topk_ids: torch.Tensor,
+        activation: MoEActivation,
+        global_num_experts: int,
+        expert_map: torch.Tensor | None,
+        apply_router_weight_on_input: bool,
+        shared_experts: SharedExperts | None = None,
+        shared_experts_input: torch.Tensor | None = None,
+    ) -> torch.Tensor:
+        if not self.can_accept_prequantized_input:
+            raise ValueError(
+                f"{type(self.prepare_finalize).__name__} does not support "
+                "prequantized MoE input."
+            )
+        assert isinstance(self.impl, FusedMoEKernelModularImpl)
+        return self.impl.apply(
+            hidden_states=hidden_states,
+            hidden_states_scale=hidden_states_scale,
+            output_dtype=output_dtype,
             w1=w1,
             w2=w2,
             topk_weights=topk_weights,

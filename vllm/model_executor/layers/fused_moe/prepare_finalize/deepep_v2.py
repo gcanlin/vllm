@@ -289,6 +289,48 @@ class DeepEPV2PrepareAndFinalize(mk.FusedMoEPrepareAndFinalizeModular):
     def supports_async(self) -> bool:
         return True
 
+    def supports_prequantized_input(self) -> bool:
+        return True
+
+    def prepare_prequantized_async(
+        self,
+        a1q: torch.Tensor,
+        a1q_scale: torch.Tensor,
+        topk_weights: torch.Tensor,
+        topk_ids: torch.Tensor,
+        num_experts: int,
+        expert_map: torch.Tensor | None,
+        apply_router_weight_on_input: bool,
+        quant_config: FusedMoEQuantConfig,
+    ) -> mk.ReceiverType:
+        del expert_map
+        mk.validate_prequantized_mxfp8_input(
+            a1q,
+            a1q_scale,
+            apply_router_weight_on_input,
+            quant_config,
+        )
+        receiver = self._do_dispatch(
+            tokens=a1q,
+            token_scales=a1q_scale.view(torch.int32),
+            rank_topk_ids=topk_ids,
+            rank_topk_weights=topk_weights,
+            num_experts=num_experts,
+            a1_scale=None,
+            quant_config=quant_config,
+            defer_input_quant=True,
+        )
+
+        def receive_prequantized() -> mk.PrepareResultType:
+            values, scales, metadata, ids, weights = receiver()
+            assert scales is not None and scales.dtype == torch.int32
+            scales = scales.view(torch.uint8).view(
+                values.shape[0], scales.shape[-1] * torch.int32.itemsize
+            )
+            return values, scales, metadata, ids, weights
+
+        return receive_prequantized
+
     def prepare_async(
         self,
         a1: torch.Tensor,

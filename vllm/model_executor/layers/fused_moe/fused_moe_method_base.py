@@ -165,6 +165,22 @@ class FusedMoEMethodBase(QuantizeMethodBase):
         """
         raise NotImplementedError
 
+    def supports_prequantized_input(self) -> bool:
+        return False
+
+    def apply_prequantized(
+        self,
+        layer: "RoutedExperts",
+        x: torch.Tensor,
+        x_scale: torch.Tensor,
+        output_dtype: torch.dtype,
+        topk_weights: torch.Tensor,
+        topk_ids: torch.Tensor,
+        shared_experts: "SharedExperts | None",
+        shared_experts_input: torch.Tensor | None,
+    ) -> torch.Tensor:
+        raise NotImplementedError
+
     def apply_monolithic(
         self,
         layer: "RoutedExperts",

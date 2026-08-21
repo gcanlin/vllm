@@ -1230,6 +1230,35 @@ class RoutedExperts(PluggableLayer):
             shared_experts_input=shared_experts_input,
         )
 
+    def supports_prequantized_input(self) -> bool:
+        return self.quant_method.supports_prequantized_input()
+
+    def forward_modular_prequantized(
+        self,
+        x: torch.Tensor,
+        x_scale: torch.Tensor,
+        output_dtype: torch.dtype,
+        topk_weights: torch.Tensor,
+        topk_ids: torch.Tensor,
+        shared_experts: "SharedExperts | None" = None,
+        shared_experts_input: torch.Tensor | None = None,
+    ) -> torch.Tensor:
+        if not self.supports_prequantized_input():
+            raise ValueError(
+                f"{type(self.quant_method).__name__} does not support "
+                "prequantized input."
+            )
+        return self.quant_method.apply_prequantized(
+            layer=self,
+            x=x,
+            x_scale=x_scale,
+            output_dtype=output_dtype,
+            topk_weights=topk_weights,
+            topk_ids=topk_ids,
+            shared_experts=shared_experts,
+            shared_experts_input=shared_experts_input,
+        )
+
     def forward_monolithic(
         self,
         x: torch.Tensor,

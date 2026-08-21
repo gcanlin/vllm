@@ -20,6 +20,7 @@ from vllm.model_executor.layers.fused_moe import TritonExperts
 from vllm.model_executor.layers.fused_moe.activation import MoEActivation
 from vllm.model_executor.layers.fused_moe.config import (
     FusedMoEQuantConfig,
+    FusedMoEQuantDesc,
 )
 from vllm.model_executor.layers.fused_moe.modular_kernel import FusedMoEKernel
 from vllm.platforms import current_platform
@@ -38,6 +39,79 @@ requires_deep_ep_v2 = pytest.mark.skipif(
     not has_deep_ep_v2(),
     reason="Requires DeepEP v2 (ElasticBuffer)",
 )
+
+
+def _mxfp8_quant_config() -> FusedMoEQuantConfig:
+    return FusedMoEQuantConfig(
+        _a1=FusedMoEQuantDesc("mxfp8"),
+        _a2=FusedMoEQuantDesc("mxfp8"),
+        _w1=FusedMoEQuantDesc("mxfp4"),
+        _w2=FusedMoEQuantDesc("mxfp4"),
+        is_scale_swizzled=False,
+        mx_alignment=256,
+    )
+
+
+def _deepep_v2_prequantized_mxfp8_dispatch(pgi: ProcessGroupInfo) -> None:
+    init_workspace_manager(pgi.device)
+    pg = torch.distributed.new_group(list(range(pgi.world_size)))
+    prepare_finalize = make_deepep_v2_a2a(
+        pg=pg,
+        pgi=pgi,
+        dp_size=1,
+        v2_args=DeepEPV2Args(
+            num_local_experts=1,
+            num_experts=2,
+            num_topk=1,
+            hidden_size=3584,
+            max_tokens_per_rank=8,
+            use_fp8_dispatch=False,
+        ),
+        use_cudagraph=False,
+    )
+
+    row_codes = torch.arange(
+        pgi.rank * 2 + 1,
+        pgi.rank * 2 + 3,
+        dtype=torch.uint8,
+        device=pgi.device,
+    )
+    values = row_codes.to(torch.float8_e4m3fn).view(2, 1).expand(2, 3584).contiguous()
+    scales = row_codes.view(2, 1).expand(2, 112).contiguous()
+    topk_ids = torch.zeros((2, 1), dtype=torch.int64, device=pgi.device)
+    topk_weights = torch.ones((2, 1), dtype=torch.float32, device=pgi.device)
+    receiver = prepare_finalize.prepare_prequantized_async(
+        values,
+        scales,
+        topk_weights,
+        topk_ids,
+        num_experts=2,
+        expert_map=None,
+        apply_router_weight_on_input=False,
+        quant_config=_mxfp8_quant_config(),
+    )
+    received_values, received_scales, _, _, _ = receiver()
+    assert received_scales is not None
+
+    if pgi.rank == 0:
+        received_codes = received_scales[:, 0].sort().values
+        expected_codes = torch.arange(1, 5, dtype=torch.uint8, device=pgi.device)
+        torch.testing.assert_close(received_codes, expected_codes, rtol=0, atol=0)
+        for code in expected_codes:
+            row = (received_scales[:, 0] == code).nonzero().item()
+            assert torch.all(received_scales[row] == code)
+            assert torch.all(received_values[row] == code.to(torch.float8_e4m3fn))
+    else:
+        assert received_values.numel() == 0
+        assert received_scales.numel() == 0
+    torch.distributed.barrier(group=pg)
+
+
+@multi_gpu_test(num_gpus=2)
+@requires_deep_ep_v2
+def test_deepep_v2_prequantized_mxfp8_dispatch_preserves_bytes() -> None:
+    """ElasticBuffer must preserve row-major UE8M0 bytes."""
+    parallel_launch(2, _deepep_v2_prequantized_mxfp8_dispatch)
 
 
 def assert_fp8_close(actual: torch.Tensor, expected: torch.Tensor) -> None:

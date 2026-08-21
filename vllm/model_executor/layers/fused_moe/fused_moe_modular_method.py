@@ -101,3 +101,37 @@ class FusedMoEModularMethod(FusedMoEMethodBase, CustomOp):
             shared_experts=shared_experts,
             shared_experts_input=shared_experts_input,
         )
+
+    def supports_prequantized_input(self) -> bool:
+        return (
+            self.moe_kernel is not None
+            and self.moe_kernel.can_accept_prequantized_input
+        )
+
+    def apply_prequantized(
+        self,
+        layer: "RoutedExperts",
+        x: torch.Tensor,
+        x_scale: torch.Tensor,
+        output_dtype: torch.dtype,
+        topk_weights: torch.Tensor,
+        topk_ids: torch.Tensor,
+        shared_experts: SharedExperts | None,
+        shared_experts_input: torch.Tensor | None,
+    ) -> torch.Tensor:
+        assert self.moe_kernel is not None
+        return self.moe_kernel.apply_prequantized(
+            hidden_states=x,
+            hidden_states_scale=x_scale,
+            output_dtype=output_dtype,
+            w1=layer.w13_weight,
+            w2=layer.w2_weight,
+            topk_weights=topk_weights,
+            topk_ids=topk_ids,
+            activation=layer.activation,
+            global_num_experts=layer.global_num_experts,
+            apply_router_weight_on_input=layer.apply_router_weight_on_input,
+            expert_map=layer.expert_map,
+            shared_experts=shared_experts,
+            shared_experts_input=shared_experts_input,
+        )
