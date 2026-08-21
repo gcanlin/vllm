@@ -8,6 +8,7 @@ from vllm.distributed import (
     get_tensor_model_parallel_world_size,
     get_tp_group,
     tensor_model_parallel_all_gather,
+    tensor_model_parallel_all_reduce,
     tensor_model_parallel_reduce_scatter,
 )
 
@@ -27,9 +28,23 @@ def sp_all_gather(x: torch.Tensor) -> torch.Tensor:
     return tensor_model_parallel_all_gather(x, 0)
 
 
-def sp_reduce_scatter(x: torch.Tensor) -> torch.Tensor:
+def sp_reduce_scatter(
+    x: torch.Tensor, *, use_underfilled_all_reduce: bool = False
+) -> torch.Tensor:
     assert x.ndim == 2
     tp_size = get_tensor_model_parallel_world_size()
+    if use_underfilled_all_reduce and 0 < x.shape[0] <= tp_size // 2:
+        # Reduce-scatter would pad M rows to tp_size rows, communicating mostly
+        # zeros for small decode batches. Reduce only the real rows, then keep
+        # the row assigned to this sequence-parallel rank. This is equivalent
+        # to reducing the padded tensor and scattering one row per rank. Stop
+        # at half occupancy so all-reduce does not move more payload than RS.
+        num_rows = x.shape[0]
+        x = tensor_model_parallel_all_reduce(x)
+        tp_rank = get_tensor_model_parallel_rank()
+        if tp_rank < num_rows:
+            return x[tp_rank : tp_rank + 1]
+        return torch.zeros_like(x[:1])
     sp_pad = (-x.shape[0]) % tp_size
     if sp_pad > 0:
         x = torch.nn.functional.pad(x, (0, 0, 0, sp_pad))

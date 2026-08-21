@@ -1189,7 +1189,7 @@ class DeepseekV4DecoderLayer(nn.Module):
 
         x = self.attn(positions, x, None)
         if self.use_sequence_parallel:
-            x = sp_reduce_scatter(x)
+            x = sp_reduce_scatter(x, use_underfilled_all_reduce=True)
 
         ffn_norm_weight = self.ffn_norm.weight.data
         ffn_norm_eps = self.ffn_norm.variance_epsilon

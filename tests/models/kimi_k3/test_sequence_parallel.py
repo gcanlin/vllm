@@ -396,6 +396,65 @@ def test_sp_reduce_scatter_uses_custom_kernel_after_padding(monkeypatch):
     fallback.assert_not_called()
 
 
+@pytest.mark.parametrize("rank", range(4))
+def test_sp_reduce_scatter_underfilled_all_reduce(monkeypatch, rank):
+    hidden_states = torch.arange(6, dtype=torch.float32).view(2, 3)
+    reduced = hidden_states + 10
+    monkeypatch.setattr(
+        sp_ops,
+        "get_tensor_model_parallel_world_size",
+        lambda: 4,
+    )
+    monkeypatch.setattr(sp_ops, "get_tensor_model_parallel_rank", lambda: rank)
+    all_reduce = Mock(return_value=reduced)
+    monkeypatch.setattr(sp_ops, "tensor_model_parallel_all_reduce", all_reduce)
+    reduce_scatter = Mock(side_effect=AssertionError("unexpected reduce-scatter"))
+    monkeypatch.setattr(
+        sp_ops,
+        "tensor_model_parallel_reduce_scatter",
+        reduce_scatter,
+    )
+
+    output = sp_ops.sp_reduce_scatter(hidden_states, use_underfilled_all_reduce=True)
+
+    expected = reduced[rank : rank + 1] if rank < 2 else torch.zeros_like(reduced[:1])
+    torch.testing.assert_close(output, expected)
+    all_reduce.assert_called_once_with(hidden_states)
+    reduce_scatter.assert_not_called()
+
+
+def test_sp_reduce_scatter_keeps_rs_above_half_occupancy(monkeypatch):
+    hidden_states = torch.arange(9, dtype=torch.float32).view(3, 3)
+    expected = torch.arange(3, dtype=torch.float32).view(1, 3)
+    monkeypatch.setattr(
+        sp_ops,
+        "get_tensor_model_parallel_world_size",
+        lambda: 4,
+    )
+    monkeypatch.setattr(
+        sp_ops,
+        "_custom_collective",
+        lambda name, tensor: None,
+    )
+    all_reduce = Mock(side_effect=AssertionError("unexpected all-reduce"))
+    monkeypatch.setattr(sp_ops, "tensor_model_parallel_all_reduce", all_reduce)
+    reduce_scatter = Mock(return_value=expected)
+    monkeypatch.setattr(
+        sp_ops,
+        "tensor_model_parallel_reduce_scatter",
+        reduce_scatter,
+    )
+
+    output = sp_ops.sp_reduce_scatter(hidden_states, use_underfilled_all_reduce=True)
+
+    torch.testing.assert_close(output, expected)
+    padded = reduce_scatter.call_args.args[0]
+    assert padded.shape == (4, 3)
+    torch.testing.assert_close(padded[:3], hidden_states)
+    torch.testing.assert_close(padded[3], torch.zeros(3))
+    all_reduce.assert_not_called()
+
+
 @pytest.mark.parametrize("shape", [(3,), (3, 2, 2)])
 def test_sp_shard_pads_only_the_token_axis(monkeypatch, shape):
     hidden_states = torch.arange(math.prod(shape), dtype=torch.float32).view(shape)
