@@ -615,6 +615,13 @@ void concat_and_cache_mla_grouped(torch::stable::Tensor& kv_c,
                                   int64_t block_size, int64_t block_stride,
                                   int64_t entry_stride);
 
+void rms_norm_rope_and_cache_mla_grouped(
+    torch::stable::Tensor& kv, torch::stable::Tensor& norm_weight,
+    torch::stable::Tensor& positions, torch::stable::Tensor& rope_cos_sin_cache,
+    bool rope_is_neox, torch::stable::Tensor& kv_cache_ptrs,
+    torch::stable::Tensor& slot_mapping, int64_t block_size,
+    int64_t block_stride, int64_t entry_stride, double epsilon);
+
 // NOTE: k_pe and kv_c order is flipped compared to concat_and_cache_mla
 void concat_and_cache_mla_rope_fused(
     torch::stable::Tensor& positions, torch::stable::Tensor& q_pe,

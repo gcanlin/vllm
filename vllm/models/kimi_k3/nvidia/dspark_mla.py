@@ -247,6 +247,33 @@ class K3DSparkModel(nn.Module):
         # 5*576 rows rather than 5*2112 rows (72.7% fewer A-projection FLOPs).
         all_kv = self.context_kv_proj(context_states)
         all_kv = all_kv.view(num_ctx, num_layers, self._context_kv_width)
+        cache_layers = [layer.self_attn for layer in self.layers]
+        slot_mapping = self._group_context_slot_mapping(
+            context_slot_mapping, num_layers
+        )
+
+        if (
+            slot_mapping is not None
+            and not is_quantized_kv_cache(cache_layers[0].kv_cache_dtype)
+            and self._has_uniform_block_layout(cache_layers)
+        ):
+            rotary_emb = cache_layers[0].rotary_emb
+            assert rotary_emb is not None
+            ops.rms_norm_rope_and_cache_mla_grouped(
+                all_kv,
+                self._context_kv_norm_weights,
+                context_positions,
+                rotary_emb.cos_sin_cache,
+                rotary_emb.is_neox_style,
+                self._get_context_kv_cache_ptrs(cache_layers),
+                slot_mapping,
+                cache_layers[0].kv_cache.size(1),
+                cache_layers[0].kv_cache.stride(0),
+                cache_layers[0].kv_cache.stride(1),
+                self._context_rms_norm_eps,
+            )
+            return
+
         all_kv_c = all_kv[..., : self._context_kv_lora_rank]
         all_k_pe = all_kv[..., self._context_kv_lora_rank :]
 
@@ -285,33 +312,13 @@ class K3DSparkModel(nn.Module):
         if context_slot_mapping is None:
             return
 
-        cache_layers = [layer.self_attn for layer in self.layers]
         if (
             not is_quantized_kv_cache(cache_layers[0].kv_cache_dtype)
             and self._has_uniform_block_layout(cache_layers)
-            and (
-                isinstance(context_slot_mapping, torch.Tensor)
-                or all(s is not None for s in context_slot_mapping)
-            )
+            and slot_mapping is not None
         ):
             # Grouped context KV insert only supports unquantized (bf16) KV cache
             # and assumes that all layers share the same block layout.
-
-            if isinstance(context_slot_mapping, (list, tuple)):
-                per_layer_slot_mappings = [
-                    s for s in context_slot_mapping if s is not None
-                ]
-                if len({s.data_ptr() for s in per_layer_slot_mappings}) == 1:
-                    # All rows alias to the same slot mapping.
-                    slot_mapping = (
-                        per_layer_slot_mappings[0].unsqueeze(0).expand(num_layers, -1)
-                    )
-                else:
-                    slot_mapping = torch.stack(per_layer_slot_mappings, dim=0)
-            else:
-                # Broadcast the single shared context_slot_mapping tensor.
-                slot_mapping = context_slot_mapping.unsqueeze(0).expand(num_layers, -1)
-
             ref_cache = cache_layers[0].kv_cache
             ops.concat_and_cache_mla_grouped(
                 all_kv_c_normed,
@@ -341,6 +348,29 @@ class K3DSparkModel(nn.Module):
                 attn.kv_cache_dtype,
                 attn._k_scale,
             )
+
+    @staticmethod
+    def _group_context_slot_mapping(
+        context_slot_mapping: torch.Tensor | list[torch.Tensor | None] | None,
+        num_layers: int,
+    ) -> torch.Tensor | None:
+        if context_slot_mapping is None:
+            return None
+        if isinstance(context_slot_mapping, torch.Tensor):
+            return context_slot_mapping.unsqueeze(0).expand(num_layers, -1)
+        if any(slot_mapping is None for slot_mapping in context_slot_mapping):
+            return None
+        per_layer_slot_mappings = [
+            slot_mapping
+            for slot_mapping in context_slot_mapping
+            if slot_mapping is not None
+        ]
+        if (
+            len({slot_mapping.data_ptr() for slot_mapping in per_layer_slot_mappings})
+            == 1
+        ):
+            return per_layer_slot_mappings[0].unsqueeze(0).expand(num_layers, -1)
+        return torch.stack(per_layer_slot_mappings, dim=0)
 
     def _has_uniform_block_layout(
         self,

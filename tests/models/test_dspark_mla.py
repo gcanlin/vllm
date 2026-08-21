@@ -186,3 +186,69 @@ def test_context_kv_weights_are_loaded_as_merged_linear_shards():
     assert [weight.shard_id for _, weight in mapped] == [1, 0, 1, 1]
     assert mapped[0][1].data_ptr() == mapped[1][1].data_ptr()
     assert mapped[2][1].data_ptr() == mapped[3][1].data_ptr()
+
+
+@pytest.mark.cpu_test
+def test_context_kv_uses_fused_tail_for_uniform_bf16_cache(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    num_layers = 2
+    num_tokens = 3
+    kv_lora_rank = 8
+    rope_dim = 2
+    width = kv_lora_rank + rope_dim
+
+    class ContextKVProj(nn.Module):
+        def forward(self, context_states):
+            return context_states[:, : num_layers * width]
+
+    class DummyAttention(nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.kv_cache = torch.empty(2, 4, width, dtype=torch.bfloat16)
+            self.kv_cache_dtype = "auto"
+            self.rotary_emb = SimpleNamespace(
+                cos_sin_cache=torch.empty(16, rope_dim),
+                is_neox_style=True,
+            )
+
+    class DummyLayer(nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.self_attn = DummyAttention()
+
+    model = K3DSparkModel.__new__(K3DSparkModel)
+    nn.Module.__init__(model)
+    model.context_kv_proj = ContextKVProj()
+    model.layers = nn.ModuleList([DummyLayer() for _ in range(num_layers)])
+    model._num_context_layers = num_layers
+    model._context_kv_width = width
+    model._context_kv_lora_rank = kv_lora_rank
+    model._context_rope_dim = rope_dim
+    model._context_rms_norm_eps = 1e-6
+    model._context_kv_norm_weights = torch.ones(
+        num_layers, kv_lora_rank, dtype=torch.bfloat16
+    )
+
+    calls = []
+    monkeypatch.setattr(
+        dspark_mla.ops,
+        "rms_norm_rope_and_cache_mla_grouped",
+        lambda *args: calls.append(args),
+    )
+    monkeypatch.setattr(
+        dspark_mla.ops,
+        "rms_norm",
+        lambda *args: pytest.fail("the unfused tail should not run"),
+    )
+
+    context_states = torch.randn(num_tokens, num_layers * width)
+    positions = torch.arange(num_tokens)
+    slot_mapping = torch.tensor([1, 3, 4])
+    model._precompute_fused_context_kv(context_states, positions, slot_mapping)
+
+    assert len(calls) == 1
+    assert calls[0][0].shape == (num_tokens, num_layers, width)
+    assert calls[0][2] is positions
+    assert calls[0][6].shape == (num_layers, num_tokens)
+    assert calls[0][6].stride(0) == 0

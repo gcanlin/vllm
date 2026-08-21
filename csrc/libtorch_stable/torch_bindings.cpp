@@ -937,6 +937,15 @@ STABLE_TORCH_LIBRARY_FRAGMENT(_C_cache_ops, ops) {
       "                             int block_size, int block_stride,"
       "                             int entry_stride) -> ()");
 
+  ops.def(
+      "rms_norm_rope_and_cache_mla_grouped("
+      "                             Tensor kv, Tensor norm_weight,"
+      "                             Tensor positions, Tensor cos_sin_cache,"
+      "                             bool is_neox, Tensor kv_cache_ptrs,"
+      "                             Tensor slot_mapping,"
+      "                             int block_size, int block_stride,"
+      "                             int entry_stride, float epsilon) -> ()");
+
   // Rotate Q and K, then write to kv cache for MLA
   ops.def(
       "concat_and_cache_mla_rope_fused("
@@ -1037,6 +1046,8 @@ STABLE_TORCH_LIBRARY_IMPL(_C_cache_ops, CUDA, ops) {
   ops.impl("concat_and_cache_mla", TORCH_BOX(&concat_and_cache_mla));
   ops.impl("concat_and_cache_mla_grouped",
            TORCH_BOX(&concat_and_cache_mla_grouped));
+  ops.impl("rms_norm_rope_and_cache_mla_grouped",
+           TORCH_BOX(&rms_norm_rope_and_cache_mla_grouped));
   ops.impl("concat_and_cache_mla_rope_fused",
            TORCH_BOX(&concat_and_cache_mla_rope_fused));
   ops.impl("convert_fp8", TORCH_BOX(&convert_fp8));

@@ -1,4 +1,5 @@
 #include "torch_utils.h"
+#include "cub_helpers.h"
 #include "dispatch_utils.h"
 
 #include "../cuda_compat.h"
@@ -16,6 +17,87 @@ typedef __hip_bfloat16 __nv_bfloat16;
 #endif
 
 namespace vllm {
+
+template <bool IS_NEOX>
+__global__ void rms_norm_rope_and_cache_mla_grouped_kernel(
+    const __nv_bfloat16* __restrict__ kv,           // [num_tokens, num_layers,
+                                                    // kv_lora_rank + rot_dim]
+    const __nv_bfloat16* __restrict__ norm_weight,  // [num_layers,
+                                                    // kv_lora_rank]
+    const int64_t* __restrict__ positions,          // [num_tokens]
+    const float* __restrict__ rope_cos_sin_cache,   // [max_position, rot_dim]
+    const int64_t* __restrict__ kv_cache_ptrs,      // [num_layers]
+    const int64_t* __restrict__ slot_mapping,       // [num_layers, num_tokens]
+    const int64_t kv_token_stride, const int64_t kv_layer_stride,
+    const int64_t weight_layer_stride, const int64_t slot_layer_stride,
+    const int block_stride, const int entry_stride, const int kv_lora_rank,
+    const int rot_dim, const int block_size, const float epsilon) {
+  const int64_t token_idx = blockIdx.x;
+  const int64_t layer_idx = blockIdx.y;
+  const int64_t slot_idx =
+      slot_mapping[layer_idx * slot_layer_stride + token_idx];
+  if (slot_idx < 0) {
+    return;
+  }
+
+  const __nv_bfloat16* kv_row =
+      kv + token_idx * kv_token_stride + layer_idx * kv_layer_stride;
+  const __nv_bfloat16* weight_row =
+      norm_weight + layer_idx * weight_layer_stride;
+  __nv_bfloat16* cache_row =
+      reinterpret_cast<__nv_bfloat16*>(kv_cache_ptrs[layer_idx]) +
+      (slot_idx / block_size) * block_stride +
+      (slot_idx % block_size) * entry_stride;
+
+  float variance = 0.0f;
+  constexpr int VEC_SIZE = 8;
+  for (int i = threadIdx.x * VEC_SIZE; i < kv_lora_rank;
+       i += blockDim.x * VEC_SIZE) {
+#pragma unroll
+    for (int j = 0; j < VEC_SIZE; ++j) {
+      const float value = static_cast<float>(kv_row[i + j]);
+      variance += value * value;
+    }
+  }
+
+  using BlockReduce = cub::BlockReduce<float, 1024>;
+  __shared__ typename BlockReduce::TempStorage reduce_store;
+  __shared__ float inverse_rms;
+  variance = BlockReduce(reduce_store).Reduce(variance, CubAddOp{}, blockDim.x);
+  if (threadIdx.x == 0) {
+    inverse_rms = rsqrtf(variance / kv_lora_rank + epsilon);
+  }
+  __syncthreads();
+
+  for (int i = threadIdx.x * VEC_SIZE; i < kv_lora_rank;
+       i += blockDim.x * VEC_SIZE) {
+#pragma unroll
+    for (int j = 0; j < VEC_SIZE; ++j) {
+      const int offset = i + j;
+      const float value = static_cast<float>(kv_row[offset]);
+      const float weight = static_cast<float>(weight_row[offset]);
+      cache_row[offset] =
+          static_cast<__nv_bfloat16>(value * inverse_rms * weight);
+    }
+  }
+
+  const int embed_dim = rot_dim / 2;
+  const float* cos_sin = rope_cos_sin_cache + positions[token_idx] * rot_dim;
+  const __nv_bfloat16* k_pe = kv_row + kv_lora_rank;
+  for (int pair_idx = threadIdx.x; pair_idx < embed_dim;
+       pair_idx += blockDim.x) {
+    const int x_idx = IS_NEOX ? pair_idx : pair_idx * 2;
+    const int y_idx = IS_NEOX ? embed_dim + pair_idx : pair_idx * 2 + 1;
+    const float cos = VLLM_LDG(cos_sin + pair_idx);
+    const float sin = VLLM_LDG(cos_sin + pair_idx + embed_dim);
+    const float x = static_cast<float>(k_pe[x_idx]);
+    const float y = static_cast<float>(k_pe[y_idx]);
+    cache_row[kv_lora_rank + x_idx] =
+        static_cast<__nv_bfloat16>(x * cos - y * sin);
+    cache_row[kv_lora_rank + y_idx] =
+        static_cast<__nv_bfloat16>(y * cos + x * sin);
+  }
+}
 
 // NOTE Be EXTRA careful with raw_kv_scalar_t, for __half and __nv_bfloat16 it's
 // using u16 as the backing type.
@@ -161,6 +243,86 @@ __global__ void concat_and_cache_mla_rope_fused_kernel(
 }
 
 }  // namespace vllm
+
+void rms_norm_rope_and_cache_mla_grouped(
+    torch::stable::Tensor& kv,           // [num_tokens, num_layers, width]
+    torch::stable::Tensor& norm_weight,  // [num_layers, kv_lora_rank]
+    torch::stable::Tensor& positions,    // [num_tokens]
+    torch::stable::Tensor& rope_cos_sin_cache,  // [max_position, rot_dim]
+    bool rope_is_neox, torch::stable::Tensor& kv_cache_ptrs,
+    torch::stable::Tensor& slot_mapping,  // [num_layers, num_tokens]
+    int64_t block_size, int64_t block_stride, int64_t entry_stride,
+    double epsilon) {
+  const int64_t num_tokens = kv.size(0);
+  const int64_t num_layers = kv.size(1);
+  const int64_t kv_lora_rank = norm_weight.size(1);
+  const int64_t rot_dim = kv.size(2) - kv_lora_rank;
+
+  STD_TORCH_CHECK(kv.dim() == 3);
+  STD_TORCH_CHECK(kv.scalar_type() == torch::headeronly::ScalarType::BFloat16);
+  STD_TORCH_CHECK(kv.stride(2) == 1);
+  STD_TORCH_CHECK(norm_weight.dim() == 2);
+  STD_TORCH_CHECK(norm_weight.size(0) == num_layers);
+  STD_TORCH_CHECK(norm_weight.scalar_type() == kv.scalar_type());
+  STD_TORCH_CHECK(norm_weight.stride(1) == 1);
+  STD_TORCH_CHECK(kv_lora_rank > 0 && kv_lora_rank % 8 == 0);
+  STD_TORCH_CHECK(rot_dim > 0 && rot_dim % 2 == 0);
+  STD_TORCH_CHECK(positions.dim() == 1 && positions.size(0) == num_tokens);
+  STD_TORCH_CHECK(positions.scalar_type() ==
+                  torch::headeronly::ScalarType::Long);
+  STD_TORCH_CHECK(positions.stride(0) == 1);
+  STD_TORCH_CHECK(rope_cos_sin_cache.dim() == 2);
+  STD_TORCH_CHECK(rope_cos_sin_cache.size(1) == rot_dim);
+  STD_TORCH_CHECK(rope_cos_sin_cache.scalar_type() ==
+                  torch::headeronly::ScalarType::Float);
+  STD_TORCH_CHECK(rope_cos_sin_cache.stride(1) == 1);
+  STD_TORCH_CHECK(kv_cache_ptrs.dim() == 1 &&
+                  kv_cache_ptrs.size(0) == num_layers);
+  STD_TORCH_CHECK(kv_cache_ptrs.scalar_type() ==
+                  torch::headeronly::ScalarType::Long);
+  STD_TORCH_CHECK(slot_mapping.dim() == 2);
+  STD_TORCH_CHECK(slot_mapping.size(0) == num_layers &&
+                  slot_mapping.size(1) == num_tokens);
+  STD_TORCH_CHECK(slot_mapping.scalar_type() ==
+                  torch::headeronly::ScalarType::Long);
+  STD_TORCH_CHECK(slot_mapping.stride(1) == 1);
+
+  if (num_tokens == 0 || num_layers == 0) {
+    return;
+  }
+
+  const torch::stable::accelerator::DeviceGuard device_guard(
+      kv.get_device_index());
+  const cudaStream_t stream = get_current_cuda_stream();
+  const dim3 grid(num_tokens, num_layers);
+  const dim3 block(64);
+
+  if (rope_is_neox) {
+    vllm::rms_norm_rope_and_cache_mla_grouped_kernel<true>
+        <<<grid, block, 0, stream>>>(
+            reinterpret_cast<const __nv_bfloat16*>(kv.const_data_ptr()),
+            reinterpret_cast<const __nv_bfloat16*>(
+                norm_weight.const_data_ptr()),
+            positions.const_data_ptr<int64_t>(),
+            rope_cos_sin_cache.const_data_ptr<float>(),
+            kv_cache_ptrs.const_data_ptr<int64_t>(),
+            slot_mapping.const_data_ptr<int64_t>(), kv.stride(0), kv.stride(1),
+            norm_weight.stride(0), slot_mapping.stride(0), block_stride,
+            entry_stride, kv_lora_rank, rot_dim, block_size, epsilon);
+  } else {
+    vllm::rms_norm_rope_and_cache_mla_grouped_kernel<false>
+        <<<grid, block, 0, stream>>>(
+            reinterpret_cast<const __nv_bfloat16*>(kv.const_data_ptr()),
+            reinterpret_cast<const __nv_bfloat16*>(
+                norm_weight.const_data_ptr()),
+            positions.const_data_ptr<int64_t>(),
+            rope_cos_sin_cache.const_data_ptr<float>(),
+            kv_cache_ptrs.const_data_ptr<int64_t>(),
+            slot_mapping.const_data_ptr<int64_t>(), kv.stride(0), kv.stride(1),
+            norm_weight.stride(0), slot_mapping.stride(0), block_stride,
+            entry_stride, kv_lora_rank, rot_dim, block_size, epsilon);
+  }
+}
 
 #define CALL_CONCAT_AND_CACHE_MLA_ROPE_FUSED(RAW_KV_T, CACHE_T, KV_DTYPE)  \
   do {                                                                     \

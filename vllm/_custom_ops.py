@@ -2847,6 +2847,34 @@ def concat_and_cache_mla_grouped(
     )
 
 
+def rms_norm_rope_and_cache_mla_grouped(
+    kv: torch.Tensor,
+    norm_weight: torch.Tensor,
+    positions: torch.Tensor,
+    cos_sin_cache: torch.Tensor,
+    is_neox: bool,
+    kv_cache_ptrs: torch.Tensor,
+    slot_mapping: torch.Tensor,
+    block_size: int,
+    block_stride: int,
+    entry_stride: int,
+    epsilon: float,
+) -> None:
+    torch.ops._C_cache_ops.rms_norm_rope_and_cache_mla_grouped(
+        kv,
+        norm_weight,
+        positions,
+        cos_sin_cache,
+        is_neox,
+        kv_cache_ptrs,
+        slot_mapping,
+        block_size,
+        block_stride,
+        entry_stride,
+        epsilon,
+    )
+
+
 def kimi_k3_attn_res(
     prefix: torch.Tensor,
     delta: torch.Tensor,

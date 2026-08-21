@@ -220,3 +220,96 @@ def test_concat_and_cache_mla_rope_fused(
         atol=0.04 if rocm_bf16 else get_default_atol(query),
         rtol=get_default_rtol(query),
     )
+
+
+@pytest.mark.parametrize("is_neox_style", [False, True])
+@pytest.mark.parametrize("num_tokens", [1, 17])
+@pytest.mark.parametrize(
+    "device",
+    [f"cuda:{i}" for i in range(1 if torch.accelerator.device_count() == 1 else 2)],
+)
+@torch.inference_mode()
+def test_rms_norm_rope_and_cache_mla_grouped(
+    default_vllm_config,
+    is_neox_style: bool,
+    num_tokens: int,
+    device: str,
+    max_position: int = 8192,
+    base: float = 10000,
+) -> None:
+    """The grouped DSpark tail matches the unfused cache contents."""
+    set_random_seed(0)
+    torch.set_default_device(device)
+
+    num_layers = 5
+    kv_lora_rank = 512
+    rope_dim = 64
+    width = kv_lora_rank + rope_dim
+    block_size = 16
+    num_blocks = 4
+    epsilon = 1e-6
+
+    rope = RotaryEmbedding(
+        rope_dim,
+        rope_dim,
+        max_position,
+        base,
+        is_neox_style,
+        torch.float32,
+    ).to(device=device)
+    positions = torch.randint(0, max_position, (num_tokens,), dtype=torch.long)
+    kv = torch.randn(num_tokens, num_layers, width, dtype=torch.bfloat16)
+    norm_weight = torch.randn(num_layers, kv_lora_rank, dtype=torch.bfloat16)
+    slot_mapping = torch.stack(
+        [
+            torch.randperm(num_blocks * block_size)[:num_tokens]
+            for _ in range(num_layers)
+        ]
+    )
+    caches = [
+        torch.zeros(
+            num_blocks,
+            block_size,
+            width,
+            dtype=torch.bfloat16,
+        )
+        for _ in range(num_layers)
+    ]
+    cache_ptrs = torch.tensor([cache.data_ptr() for cache in caches], dtype=torch.int64)
+
+    kv_c = kv[..., :kv_lora_rank].permute(1, 0, 2).contiguous()
+    kv_c_normed = torch.empty_like(kv_c)
+    ops.rms_norm(kv_c_normed, kv_c, norm_weight, epsilon)
+    k_pe = kv[..., kv_lora_rank:].permute(1, 0, 2).contiguous()
+    k_pe_flat = k_pe.view(num_layers * num_tokens, 1, rope_dim)
+    repeated_positions = positions.repeat(num_layers)
+    ops.rotary_embedding(
+        repeated_positions,
+        k_pe_flat,
+        None,
+        rope.head_size,
+        rope.cos_sin_cache,
+        rope.is_neox_style,
+    )
+    expected = [torch.zeros_like(cache) for cache in caches]
+    for layer_idx, cache in enumerate(expected):
+        cache.view(-1, width)[slot_mapping[layer_idx]] = torch.cat(
+            (kv_c_normed[layer_idx], k_pe[layer_idx]), dim=-1
+        )
+
+    ops.rms_norm_rope_and_cache_mla_grouped(
+        kv,
+        norm_weight,
+        positions,
+        rope.cos_sin_cache,
+        rope.is_neox_style,
+        cache_ptrs,
+        slot_mapping,
+        block_size,
+        caches[0].stride(0),
+        caches[0].stride(1),
+        epsilon,
+    )
+
+    for result, reference in zip(caches, expected):
+        torch.testing.assert_close(result, reference)
