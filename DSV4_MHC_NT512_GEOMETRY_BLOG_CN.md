@@ -12,32 +12,45 @@ DeepSeek-V4-Flash-0731 的小 batch decode 延迟。最终落盘的改动只有�
 
 在 BS=1、TP8+EP8（sequence parallel）的 decode 路径上，用 nsys
 （`--cuda-graph-trace=node`，能看到 CUDA graph 内部节点）对一个完整
-step 做时间线分解。一个 step 约 6.49 ms、主流上 501 个 kernel，
-但主流 busy 只占 41%：
+step 做时间线分解。一个 step 约 6.56 ms、主流 588 个 kernel、21 层
+MoE；**主流 busy 只有 47.5%**，成分如下（图见
+[DSV4_MHC_NT512_STEP_BREAKDOWN.png](DSV4_MHC_NT512_STEP_BREAKDOWN.png)，
+数据在 [DSV4_MHC_NT512_STEP_BREAKDOWN.json](DSV4_MHC_NT512_STEP_BREAKDOWN.json)，
+10 个 step 平均）：
 
-| kernel | 每步总时长 | 次数 | 单次 |
-| --- | ---: | ---: | ---: |
-| sm100 MegaMoE（fp8/fp4） | 823 µs | 20 | 41.2 µs |
-| fp8/fp4 1d1d GEMM（各类投影） | 386 µs | 60 | 6.4 µs |
-| FlashMLA sparse attention | 237 µs | 20 | 11.7 µs |
-| **mhc_fused（下称 A）** | **199 µs** | **40** | 5.0 µs |
-| **mhc_pre_big_fuse_with_norm（下称 B）** | **189 µs** | **40** | 4.7 µs |
-| per-token-group quant | 160 µs | 40 | 4.0 µs |
-| MLA combine | 143 µs | 20 | 7.2 µs |
-| mnnvl reduce-scatter / all-gather | 235 µs | 40 | ~6 µs |
+| 类别 | 每步耗时 | 占 step |
+| --- | ---: | ---: |
+| MoE（MegaMoE 融合专家，42.9 µs × 21） | 897 µs | 13.7% |
+| 投影 GEMM（fp8/fp4 1d1d × 104 + nvjet splitK） | 754 µs | 11.5% |
+| **mHC（A `mhc_fused` 8.02µs×41 + B `mhc_pre_big_fuse` 4.77µs×41）** | **521 µs** | **7.9%** |
+| 注意力（splitkv MLA + combine + indexer + norm/rope/quant） | 499 µs | 7.6% |
+| TP 通信（reduce_scatter / all_gather × 21） | 346 µs | 5.3% |
+| GEMM 输入量化（per_token_group quant ×83） | 301 µs | 4.6% |
+| Router/TopK/prepare | 126 µs | 1.9% |
+| 其它（head/elementwise/norm） | 33 µs | 0.5% |
+| **空闲 / 跨 rank 同步气泡** | **3443 µs** | **52.5%** |
 
-mHC 边界对（A+B）每步出现 40 次、合计约占 step 的 14%，且 A→B 在 PDL 下
-几乎背靠背（gap ≈ -0.22 µs），是名副其实的依赖链关键路径。B 里有一段
+按 kernel 时间线跨度（含两侧启动间隔）度量，mHC 边界对约占 step 的 14%
+——空闲中有相当一部分被边界对前后的依赖等待吸收。A→B 在 PDL 下几乎
+背靠背（gap ≈ -0.22 µs），是名副其实的依赖链关键路径。B 里有一段
 warp0 独占的 20 次 sinkhorn 串行迭代；消融实验（把 B 的 sinkhorn 删掉）显示
 B 从 4.22 µs 降到 2.89 µs——也就是说 B 的时长完全由这条串行链决定。
 这给了我们三个候选方向：压 A、压 B、或者把 sinkhorn 挪出关键链。
+
+另外值得记录：52.5% 的空闲并非均匀的 launch 间隙，而是约 20 个重复出现的
+~130 µs 大气泡（合计 ~2.7 ms），每个气泡结束于一个 8 卡完全对齐启动的
+side-stream splitK GEMM——气泡期间本 rank 各流全空、其它 rank 仍在工作，
+是典型的跨 rank 同步等待（BS=1 下各 rank 每层本地工作量仅 ~100-150 µs，
+任何抖动都会在每层一个的同步点上累积放大）。这是 kernel 粒度之外、
+量级更大的下一个结构性目标。
 
 ## 二、四次尝试
 
 ### 尝试 1：A kernel 权重预取（PDL staging）——微基准赢，E2E 回退 ~3% ❌
 
-思路：A 每次启动都要冷读 1.5 MiB 的 fp32 fn 权重（40 个边界的工作集超过
-L2），而 PDL 允许本 kernel 在前驱未结束时提前启动。于是把权重切片
+思路：A 每次启动都要冷读 1.5 MiB 的 fp32 fn 权重（每个边界各一份；两次
+访问之间 MoE 层的海量专家权重读取会把 L2 完全洗刷，因此每次都是冷读），
+而 PDL 允许本 kernel 在前驱未结束时提前启动。于是把权重切片
 `T.copy` 到 shared memory 的代码挪到 `pdl_sync` **之前**，让冷读与前驱的
 尾巴重叠。数学不变，逐位一致。
 
@@ -107,9 +120,9 @@ baseline 为含 SM100 fused shared expert / FlashMLA single-batch 优化的
 逐 run 中位数：baseline 6.5612 / 6.5633；本 PR 6.4906 / 6.4917——每个
 优化 run 都优于每个 baseline run，超出同实例 ±0.01 ms 的噪声带。
 
-隔离 harness（40 个边界、L2 冷权重、graph 回放）：每边界
-8.43 → 7.56 µs（-10.3%）。E2E 收益小于隔离值，因为边界在真实管线里被
-PDL 重叠盖住了一部分。
+隔离 harness（每段重放 86 个边界、各边界用互不相干的权重模拟 L2 冷读、
+CUDA graph 回放）：每边界 8.43 → 7.56 µs（-10.3%）。E2E 收益小于隔离值，
+因为边界在真实管线里被 PDL 重叠盖住了一部分。
 
 精度（GSM8K 全量 1319 题、5-shot、temperature 0、max 256 tokens）：
 baseline 93.63%，本 PR 94.31%——改动对同输入逐位一致，精度波动属于

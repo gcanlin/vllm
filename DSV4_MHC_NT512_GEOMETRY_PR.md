@@ -26,10 +26,15 @@ throughput by 2.31%. GSM8K accuracy is unchanged within measurement noise.
 
 At small batch the fused mHC kernel is latency bound, not throughput bound:
 per launch it moves only `num_tokens x hc_mult x hidden_size` activations but
-reads a fresh 1.5 MiB fp32 weight tile. An nsys decomposition of the decode
-step at BS=1 shows the pair (`mhc_fused_tilelang` +
+reads a fresh 1.5 MiB fp32 weight tile (the MoE expert-weight traffic between
+two visits evicts it from L2 every time). An nsys decomposition of the decode
+step at BS=1 — 21 MoE layers, 588 kernels on the main stream, 47.5% busy —
+shows the mHC pair (`mhc_fused_tilelang` +
 `mhc_pre_big_fuse_with_norm_tilelang`) spans ~10.4 us per boundary, ~14% of
-the step, with the kernels launched back to back under PDL.
+the step with launch gaps, launched back to back under PDL. The full
+operator-level breakdown is in
+[DSV4_MHC_NT512_STEP_BREAKDOWN.png](DSV4_MHC_NT512_STEP_BREAKDOWN.png)
+(data: [DSV4_MHC_NT512_STEP_BREAKDOWN.json](DSV4_MHC_NT512_STEP_BREAKDOWN.json)).
 
 Reducing per-thread serial work shortens the kernel's issue window directly:
 the kernel has no other parallelism to hide the second hidden-element
