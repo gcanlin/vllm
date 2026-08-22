@@ -565,21 +565,44 @@ def mhc_fused_post_pre_tilelang(
     )
 
     if use_small_fma:
-        mhc_fused_tilelang(
-            comb_res_mix_flat,
-            residual_flat,
-            post_layer_mix_flat,
-            x_flat,
-            fn.view(hc_mult3, hc_mult, hidden_size),
-            gemm_out_mul,
-            gemm_out_sqrsum,
-            residual_cur,
-            hc_mult,
-            hidden_size,
-            hc_mult3,
-            tile_n=tile_n,
-            n_splits=n_splits,
-        )
+        # Single-iteration geometry for very small batches: size n_thr so
+        # that h_per_split % n_thr == 0 (h_iters == 1). Each thread then owns
+        # exactly one hidden element, so the T.serial(h_iters) loop disappears
+        # and the whole mHC post-map + FMA issue stream is a single flat pass,
+        # which is measurably faster in decode (see PR description).
+        if num_tokens <= 8 and (hidden_size // n_splits) % 512 == 0:
+            mhc_fused_tilelang(
+                comb_res_mix_flat,
+                residual_flat,
+                post_layer_mix_flat,
+                x_flat,
+                fn.view(hc_mult3, hc_mult, hidden_size),
+                gemm_out_mul,
+                gemm_out_sqrsum,
+                residual_cur,
+                hc_mult,
+                hidden_size,
+                hc_mult3,
+                n_thr=512,
+                tile_n=tile_n,
+                n_splits=n_splits,
+            )
+        else:
+            mhc_fused_tilelang(
+                comb_res_mix_flat,
+                residual_flat,
+                post_layer_mix_flat,
+                x_flat,
+                fn.view(hc_mult3, hc_mult, hidden_size),
+                gemm_out_mul,
+                gemm_out_sqrsum,
+                residual_cur,
+                hc_mult,
+                hidden_size,
+                hc_mult3,
+                tile_n=tile_n,
+                n_splits=n_splits,
+            )
     else:
         mhc_post_tilelang(
             comb_res_mix_flat,
