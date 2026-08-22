@@ -153,6 +153,15 @@ def test_sparse_flashmla_decode_smoke():
     assert out.shape[0] == batch_size
     assert out.shape[-1] == head_dim_v
     assert lse.shape[0] == batch_size
+    assert tile_md.num_splits is not None
+    assert tile_md.num_splits.cpu().tolist() == [0, 2]
+    assert tile_md.tile_scheduler_metadata is not None
+    sched = tile_md.tile_scheduler_metadata.cpu()
+    assert sched[:2].tolist() == [
+        [0, 0, 0, 1, 0, 1, 1, 0],
+        [0, 0, 1, 2, 1, 1, 1, 0],
+    ]
+    assert torch.all(sched[2:, 0] == 1)
 
 
 @pytest.mark.parametrize("h_q", [64, 128])

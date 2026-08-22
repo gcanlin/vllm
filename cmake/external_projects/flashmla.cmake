@@ -21,6 +21,8 @@ else()
         GIT_REPOSITORY https://github.com/vllm-project/FlashMLA
         GIT_TAG a8f794d1251cbfd88a5011445dd5582289c727e4
         GIT_PROGRESS TRUE
+        PATCH_COMMAND git apply --whitespace=nowarn
+          ${CMAKE_SOURCE_DIR}/cmake/patches/flashmla_single_batch_decode_metadata.patch
         CONFIGURE_COMMAND ""
         BUILD_COMMAND ""
   )

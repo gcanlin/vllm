@@ -1,0 +1,58 @@
+diff --git a/csrc/smxx/decode/get_decoding_sched_meta/get_decoding_sched_meta.cu b/csrc/smxx/decode/get_decoding_sched_meta/get_decoding_sched_meta.cu
+index 083da60..ba52849 100644
+--- a/csrc/smxx/decode/get_decoding_sched_meta/get_decoding_sched_meta.cu
++++ b/csrc/smxx/decode/get_decoding_sched_meta/get_decoding_sched_meta.cu
+@@ -10,0 +11,47 @@ namespace smxx::decode {
++__global__ void __launch_bounds__(32, 1, 1)
++get_mla_metadata_single_batch_kernel(
++    __grid_constant__ const GetDecodeSchedMetaParams params) {
++    int cur_s_k;
++    if (params.topk == -1) {
++        cur_s_k = __ldg(params.seqlens_k_ptr);
++    } else {
++        cur_s_k = params.topk_length ? __ldg(params.topk_length) : params.topk;
++        if (cur_s_k == 0) cur_s_k = 1;
++        if (params.extra_topk) {
++            cur_s_k = ku::ceil(cur_s_k, params.block_size_n);
++            cur_s_k += params.extra_topk_length
++                ? __ldg(params.extra_topk_length)
++                : params.extra_topk;
++        }
++    }
++
++    const int num_blocks = cutlass::ceil_div(max(cur_s_k, 1), params.block_size_n);
++    const int blocks_per_part = cutlass::ceil_div(
++        num_blocks + params.fixed_overhead_num_blocks, params.num_sm_parts);
++    const int num_used_parts = cutlass::ceil_div(num_blocks, blocks_per_part);
++    const bool is_split = num_used_parts > 1;
++
++    for (int part_idx = threadIdx.x; part_idx < params.num_sm_parts;
++         part_idx += blockDim.x) {
++        DecodingSchedMeta meta{};
++        if (part_idx < num_used_parts) {
++            meta.begin_req_idx = 0;
++            meta.end_req_idx = 0;
++            meta.begin_block_idx = part_idx * blocks_per_part;
++            meta.end_block_idx = min((part_idx + 1) * blocks_per_part, num_blocks);
++            meta.begin_split_idx = part_idx;
++            meta.is_first_req_splitted = is_split;
++            meta.is_last_req_splitted = is_split;
++        } else {
++            // Consumers only inspect begin_req_idx before returning from an idle
++            // partition, so the zero-initialized remainder is intentionally unused.
++            meta.begin_req_idx = 1;
++        }
++        params.tile_scheduler_metadata_ptr[part_idx] = meta;
++    }
++    if (threadIdx.x == 0) {
++        params.num_splits_ptr[0] = 0;
++        params.num_splits_ptr[1] = num_used_parts;
++    }
++}
++
+@@ -109,0 +157,5 @@ void run_get_decoding_sched_meta_kernel(GetDecodeSchedMetaParams &params) {
++    if (params.b == 1) {
++        get_mla_metadata_single_batch_kernel<<<1, 32, 0, params.stream>>>(params);
++        CHECK_CUDA_KERNEL_LAUNCH();
++        return;
++    }
