@@ -1,1 +1,118 @@
-{"span_us": 6561926.5, "busy_us": 3118642.6, "idle_us": 3443283.9, "cats": {"MoE (MegaMoE fused experts)": 896455.3, "Router/TopK/MoE-prep": 125887.6, "Attention (MLA sparse+indexer)": 498860.5, "MHC": 520962.9, "Comm TP (reduce-scatter/all-gather)": 346509.8, "Quant (GEMM input fp8)": 301115.0, "Projection GEMM (fp8/fp4 + nvjet)": 753665.6, "Other (elementwise/norm/head)": 33068.7}}
+{
+ "n_steps": 11,
+ "stride_us": 6597782.636363637,
+ "span_us": 5946557.909090909,
+ "union_busy_us": 6425777.181818182,
+ "kernels_per_step": 1538.5454545454545,
+ "union_busy_pct": 97.39298088425271,
+ "cats_us": {
+  "quant": 587590.9090909091,
+  "gemm": 1962921,
+  "attn": 1700004.6363636365,
+  "other": 344186.63636363635,
+  "comm": 833525.2727272727,
+  "mhc": 1208144.0909090908,
+  "router": 165639.18181818182,
+  "moe": 1833605.8181818181
+ },
+ "stream_busy_us": {
+  "1533": 3609017.1818181816,
+  "1531": 317499.45454545453,
+  "1532": 320225,
+  "1530": 937558.2727272727,
+  "1534": 3227019.4545454546,
+  "23": 224298.18181818182
+ },
+ "top_kernels": [
+  {
+   "name": "void deep_gemm::sm100_fp8_fp4_mega_moe_impl",
+   "total_us": 1833605.8181818181,
+   "n": 43.0
+  },
+  {
+   "name": "void deep_gemm::sm100_fp8_fp4_gemm_1d1d_impl",
+   "total_us": 1152124.0,
+   "n": 193.0
+  },
+  {
+   "name": "mhc_fused_tilelang_kernel",
+   "total_us": 793019.6363636364,
+   "n": 85.0
+  },
+  {
+   "name": "void per_token_group_quant_8bit_packed_register_kernel",
+   "total_us": 587590.9090909091,
+   "n": 150.0
+  },
+  {
+   "name": "void vllm::mnnvl_lamport_reduce_scatter_kernel",
+   "total_us": 536107.5454545454,
+   "n": 43.0
+  },
+  {
+   "name": "void sm100::decode::head64::flash_fwd_splitkv_mla_fp8_sparse_kernel",
+   "total_us": 506615.1818181818,
+   "n": 43.0
+  },
+  {
+   "name": "mhc_pre_big_fuse_with_norm_tilelang_kernel",
+   "total_us": 406746.2727272727,
+   "n": 85.0
+  },
+  {
+   "name": "void smxx::decode::flash_fwd_mla_combine_kernel",
+   "total_us": 298296.54545454547,
+   "n": 43.0
+  },
+  {
+   "name": "void vllm::mnnvl_lamport_all_gather",
+   "total_us": 297417.7272727273,
+   "n": 44.0
+  },
+  {
+   "name": "nvjet_sm100_tss_32x64_64x16_4x1_v_bz_splitK_TNN",
+   "total_us": 231859.0909090909,
+   "n": 41.0
+  },
+  {
+   "name": "nvjet_sm100_tss_64x16_64x16_4x1_h_bz_TNT",
+   "total_us": 182401.81818181818,
+   "n": 21.0
+  },
+  {
+   "name": "void cublasLt::splitKreduce_kernel",
+   "total_us": 163888.81818181818,
+   "n": 62.0
+  },
+  {
+   "name": "_save_partial_states_kernel",
+   "total_us": 149755.9090909091,
+   "n": 62.0
+  },
+  {
+   "name": "void vllm::deepseek_v4_fused_ops::fusedDeepseekV4QNormRopeKVRopeQuantInsertKernel",
+   "total_us": 125567.54545454546,
+   "n": 43.0
+  },
+  {
+   "name": "nvjet_sm100_tst_32x64_64x16_2x1_v_bz_splitK_TNN",
+   "total_us": 113349.09090909091,
+   "n": 21.0
+  },
+  {
+   "name": "kernel_cutlass_kernel_vllmmodelsdeepseek_v4nvidiaopssparse_attn_compress_cutedslSparseAttnCompressNormRopeStoreC4Kernel_object_at__tensorptrf32gmemalign16o2048i64div16i64div161_tensorptri_0",
+   "total_us": 109640.27272727272,
+   "n": 21.0
+  },
+  {
+   "name": "void deep_gemm::sm100_paged_mqa_logits",
+   "total_us": 105794.09090909091,
+   "n": 21.0
+  },
+  {
+   "name": "kernel_cutlass_kernel_vllmmodel_executorkernelslinearcute_dsl_ll_bf16_dotprodLLBf16Dotprod_object_at__tensorptrbf16gmemalign16o14096i64div81_tensorptrbf16gmemalign16o4096i64div81_tensorpt_0",
+   "total_us": 95507.81818181818,
+   "n": 43.0
+  }
+ ]
+}

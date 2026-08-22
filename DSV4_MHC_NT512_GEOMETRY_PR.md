@@ -17,8 +17,9 @@ sum, and the per-thread FMA into the pre-norm GEMM accumulators all become a
 single flat pass, and the shared-memory cross-warp reduction keeps its exact
 shape (the reduction tree and therefore the numerics are unchanged).
 
-At batch size 1 the mHC boundary pair runs 40 times per decode step and sits
-directly on the dependency chain. On 8x B200 with DeepSeek-V4-Flash-0731 the
+At batch size 1 the mHC boundary pair runs ~85 times per decode step
+(2 boundaries x 43 MoE layers) and sits directly on the dependency chain.
+On 8x B200 with DeepSeek-V4-Flash-0731 the
 change improves median decode TPOT by 1.08% and concurrency-8 output
 throughput by 2.31%. GSM8K accuracy is unchanged within measurement noise.
 
@@ -28,10 +29,13 @@ At small batch the fused mHC kernel is latency bound, not throughput bound:
 per launch it moves only `num_tokens x hc_mult x hidden_size` activations but
 reads a fresh 1.5 MiB fp32 weight tile (the MoE expert-weight traffic between
 two visits evicts it from L2 every time). An nsys decomposition of the decode
-step at BS=1 — 21 MoE layers, 588 kernels on the main stream, 47.5% busy —
-shows the mHC pair (`mhc_fused_tilelang` +
-`mhc_pre_big_fuse_with_norm_tilelang`) spans ~10.4 us per boundary, ~14% of
-the step with launch gaps, launched back to back under PDL. The full
+step at BS=1 — one decode step is a single CUDA-graph replay, ~1540 kernels
+on device 0 across 6 captured streams, with 43 MoE layers alternating between
+two compute streams and projection GEMMs on side streams, device-union busy
+97.4% — shows the mHC pair (`mhc_fused_tilelang` +
+`mhc_pre_big_fuse_with_norm_tilelang`) accounts for 1.21 ms of kernel time
+per step, ~14% of the on-device kernel total (~18% of the 6.60 ms stride),
+launched back to back under PDL. The full
 operator-level breakdown is in
 [DSV4_MHC_NT512_STEP_BREAKDOWN.png](DSV4_MHC_NT512_STEP_BREAKDOWN.png)
 (data: [DSV4_MHC_NT512_STEP_BREAKDOWN.json](DSV4_MHC_NT512_STEP_BREAKDOWN.json)).

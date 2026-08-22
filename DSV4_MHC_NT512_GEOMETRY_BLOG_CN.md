@@ -8,41 +8,50 @@ DeepSeek-V4-Flash-0731 的小 batch decode 延迟。最终落盘的改动只有�
 挖 kernel 粒度收益"）来说，**知道哪些路走不通、为什么走不通，和那一个
 百分点的收益同样有价值**。
 
-## 一、目标选择：nsys 分解 decode step
+## 一、目标选择：nsys 分解 decode step（含一次自我修正）
 
 在 BS=1、TP8+EP8（sequence parallel）的 decode 路径上，用 nsys
 （`--cuda-graph-trace=node`，能看到 CUDA graph 内部节点）对一个完整
-step 做时间线分解。一个 step 约 6.56 ms、主流 588 个 kernel、21 层
-MoE；**主流 busy 只有 47.5%**，成分如下（图见
+step 做时间线分解。decode step 是**一整张 CUDA graph 的 replay**
+（graphId 1214；dev0 每步 ~1539 个 kernel），stride ≈ 6.60 ms。vLLM
+在这张图内部固化了相当激进的多流结构：两条计算流按层交替（43 个
+MoE 层一条流 21 层、相邻层换到另一条流跑），三条 aux stream 专门承载
+indexer/compressor 的并行输入投影 GEMM（cuBLAS nvjet splitK）。kernel
+时间跨流合计 8.64 ms/step，**设备级 union busy 97.4%**，平均重叠
+1.34×。
+
+> 修正记录：本文最初版本只统计了其中一条计算流的时间线，曾得出
+> 「主流 busy 47.5%、约 20 个 ~130 µs 的跨 rank 同步大气泡」的结论。
+> 后来做了 device-union 分析（任一 kernel 在跑即视为 busy）：那些
+> 「气泡」期间本 rank 的另一条计算流恰好在执行相邻层的完整管线
+>（logits→topk→sparse MLA→quant→GEMM→lamport RS→mHC→router→
+> mega_moe→AG），其余 7 个 rank 同样 93–98% busy。也就是说单流视图里
+> 的空隙全部被 CUDA graph 内部固化的多流流水盖住了，**并不存在可收割
+> 的大气泡**；剩下的空隙只有层间接缝的 ~20–34 µs。这直接改写了优化
+> 判据：decode 时延已经是纯 kernel 执行时间驱动的，改善 TPOT 只能靠
+> 把依赖链上的 kernel 本身做快——这正是本文 mHC 方向的立足点。
+
+每步各类算子的 kernel 时间（跨 6 条流求和，11 个 step 平均；图见
 [DSV4_MHC_NT512_STEP_BREAKDOWN.png](DSV4_MHC_NT512_STEP_BREAKDOWN.png)，
-数据在 [DSV4_MHC_NT512_STEP_BREAKDOWN.json](DSV4_MHC_NT512_STEP_BREAKDOWN.json)，
-10 个 step 平均）：
+数据在 [DSV4_MHC_NT512_STEP_BREAKDOWN.json](DSV4_MHC_NT512_STEP_BREAKDOWN.json)）：
 
-| 类别 | 每步耗时 | 占 step |
+| 类别 | 每步耗时 | 占 kernel 时间总和 |
 | --- | ---: | ---: |
-| MoE（MegaMoE 融合专家，42.9 µs × 21） | 897 µs | 13.7% |
-| 投影 GEMM（fp8/fp4 1d1d × 104 + nvjet splitK） | 754 µs | 11.5% |
-| **mHC（A `mhc_fused` 8.02µs×41 + B `mhc_pre_big_fuse` 4.77µs×41）** | **521 µs** | **7.9%** |
-| 注意力（splitkv MLA + combine + indexer + norm/rope/quant） | 499 µs | 7.6% |
-| TP 通信（reduce_scatter / all_gather × 21） | 346 µs | 5.3% |
-| GEMM 输入量化（per_token_group quant ×83） | 301 µs | 4.6% |
-| Router/TopK/prepare | 126 µs | 1.9% |
-| 其它（head/elementwise/norm） | 33 µs | 0.5% |
-| **空闲 / 跨 rank 同步气泡** | **3443 µs** | **52.5%** |
+| 投影 GEMM（fp8/fp4 gemm_1d1d ×193 + nvjet splitK ×62 + splitKreduce） | 1963 µs | 22.7% |
+| MoE（MegaMoE 融合专家，42.6 µs × 43） | 1834 µs | 21.2% |
+| 注意力（splitkv MLA ×43 + combine + indexer + norm/rope） | 1700 µs | 19.7% |
+| **mHC（A `mhc_fused` 9.3µs×85 + B `mhc_pre_big_fuse` 4.8µs×85）** | **1208 µs** | **14.0%** |
+| TP 通信（reduce_scatter 12.5µs×43 / all_gather 6.8µs×44） | 834 µs | 9.7% |
+| GEMM 输入量化（per_token_group quant 3.9µs×150） | 588 µs | 6.8% |
+| 其它（head/elementwise/norm） | 344 µs | 4.0% |
+| Router/TopK/prepare | 166 µs | 1.9% |
 
-按 kernel 时间线跨度（含两侧启动间隔）度量，mHC 边界对约占 step 的 14%
-——空闲中有相当一部分被边界对前后的依赖等待吸收。A→B 在 PDL 下几乎
-背靠背（gap ≈ -0.22 µs），是名副其实的依赖链关键路径。B 里有一段
-warp0 独占的 20 次 sinkhorn 串行迭代；消融实验（把 B 的 sinkhorn 删掉）显示
+mHC 边界对合计 1.21 ms/step：占 kernel 时间总和的 14.0%，占 step
+stride（6.60 ms）的 18.3%。边界对内 A→B 在 PDL 下几乎背靠背
+（gap ≈ -0.22 µs），是名副其实的依赖链关键路径。B 里有一段 warp0
+独占的 20 次 sinkhorn 串行迭代；消融实验（把 B 的 sinkhorn 删掉）显示
 B 从 4.22 µs 降到 2.89 µs——也就是说 B 的时长完全由这条串行链决定。
 这给了我们三个候选方向：压 A、压 B、或者把 sinkhorn 挪出关键链。
-
-另外值得记录：52.5% 的空闲并非均匀的 launch 间隙，而是约 20 个重复出现的
-~130 µs 大气泡（合计 ~2.7 ms），每个气泡结束于一个 8 卡完全对齐启动的
-side-stream splitK GEMM——气泡期间本 rank 各流全空、其它 rank 仍在工作，
-是典型的跨 rank 同步等待（BS=1 下各 rank 每层本地工作量仅 ~100-150 µs，
-任何抖动都会在每层一个的同步点上累积放大）。这是 kernel 粒度之外、
-量级更大的下一个结构性目标。
 
 ## 二、四次尝试
 
