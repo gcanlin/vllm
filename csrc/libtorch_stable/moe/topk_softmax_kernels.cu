@@ -726,6 +726,9 @@ void topkGatingKernelLauncher(
         case 576:
             LAUNCH_TOPK(576, WARPS_PER_TB, BYTES_PER_LDG_MULTIPLE_64);
             break;
+        case 896:
+            LAUNCH_TOPK(896, WARPS_PER_TB, BYTES_PER_LDG_MULTIPLE_64);
+            break;
 #endif
         default: {
             STD_TORCH_CHECK(workspace != nullptr,
