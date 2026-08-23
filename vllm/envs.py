@@ -209,6 +209,7 @@ if TYPE_CHECKING:
     ] = "relax"
     VLLM_USE_FUSED_MOE_GROUPED_TOPK: bool = True
     VLLM_MOE_SKIP_PADDING: bool = True
+    VLLM_DSV4_FUSE_TOPK_PREPARE: bool = True
     VLLM_KIMI_K3_SHARD_SP_SHARED_EXPERT: bool = False
     VLLM_KIMI_K3_AUX_ATTN_RES_STREAM: bool = False
     VLLM_KIMI_K3_GEMM_AR: bool = True
@@ -1596,6 +1597,13 @@ environment_variables: dict[str, Callable[[], Any]] = {
     # ids to -1 so the dispatch and experts drop them. Requires a MoE kernel that
     # treats topk_id == -1 as a skip sentinel
     "VLLM_MOE_SKIP_PADDING": lambda: bool(int(os.getenv("VLLM_MOE_SKIP_PADDING", "1"))),
+    # DeepSeek V4 MegaMoE only. Fuse the router top-k selection into the
+    # MegaMoE input-staging Triton kernel, removing one serialized small
+    # kernel per MoE layer from the decode critical path. Bitwise-identical
+    # outputs; set to 0 to fall back to the separate top-k + staging path.
+    "VLLM_DSV4_FUSE_TOPK_PREPARE": lambda: bool(
+        int(os.getenv("VLLM_DSV4_FUSE_TOPK_PREPARE", "1"))
+    ),
     # Kimi-K3 only. Under sequence-parallel MoE the dense and shared-expert MLPs
     # are replicated on every rank, so each rank streams the whole weight to
     # serve its own token shard. Shard them across TP instead: the MLP then

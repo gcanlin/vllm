@@ -38,6 +38,9 @@ from vllm.model_executor.layers.fused_moe.router.base_router import (
 from vllm.model_executor.layers.fused_moe.router.fused_topk_bias_router import (
     fused_topk_bias,
 )
+from vllm.model_executor.layers.fused_moe.router.dsv4_topk import (
+    can_use_dsv4_topk,
+)
 from vllm.model_executor.layers.fused_moe.router.gate_linear import GateLinear
 from vllm.model_executor.layers.layernorm import RMSNorm
 from vllm.model_executor.layers.linear import (
@@ -79,7 +82,10 @@ from vllm.models.deepseek_v4.nvidia.flashinfer_sparse import (
     DeepseekV4FlashInferSM120Attention,
 )
 from vllm.models.deepseek_v4.nvidia.flashmla import DeepseekV4FlashMLAAttention
-from vllm.models.deepseek_v4.nvidia.ops.prepare_megamoe import prepare_megamoe_inputs
+from vllm.models.deepseek_v4.nvidia.ops.prepare_megamoe import (
+    dsv4_topk_prepare_megamoe,
+    prepare_megamoe_inputs,
+)
 from vllm.platforms import current_platform
 from vllm.sequence import IntermediateTensors
 from vllm.utils.math_utils import cdiv
@@ -639,6 +645,7 @@ class DeepseekV4MegaMoEExperts(nn.Module):
         *,
         activation_clamp: float | None,
         fast_math: bool = True,
+        prestaged: bool = False,
     ) -> torch.Tensor:
         if hidden_states.shape[0] > self.max_num_tokens:
             raise ValueError(
@@ -653,61 +660,63 @@ class DeepseekV4MegaMoEExperts(nn.Module):
 
         symm_buffer = self.get_symm_buffer()
         num_tokens = hidden_states.shape[0]
-        is_padding = None
-        if envs.VLLM_MOE_SKIP_PADDING and is_forward_context_available():
-            is_padding = get_forward_context().is_padding
-            if is_padding is not None:
-                is_padding = is_padding[:num_tokens]
 
         if self.capture_fn is not None:
             self.capture_fn(topk_ids)
 
-        # EPLB: map logical expert IDs to physical replicas and record load.
-        eplb_state = self.eplb_state
-        if eplb_state.logical_to_physical_map is not None:
-            assert eplb_state.expert_load_view is not None
-            assert eplb_state.logical_replica_count is not None
-            assert eplb_state.should_record_tensor is not None
-            if is_padding is not None:
-                topk_ids = torch.where(is_padding.unsqueeze(1), -1, topk_ids)
-            topk_ids = eplb_map_to_physical_and_record(
-                topk_ids=topk_ids,
-                expert_load_view=eplb_state.expert_load_view,
-                logical_to_physical_map=eplb_state.logical_to_physical_map,
-                logical_replica_count=eplb_state.logical_replica_count,
-                record_enabled=eplb_state.should_record_tensor,
-                num_unpadded_tokens=eplb_state.num_unpadded_tokens_tensors[
-                    dbo_current_ubatch_id()
-                ]
-                if eplb_state.num_unpadded_tokens_tensors is not None
-                else None,
-            )
+        if not prestaged:
+            is_padding = None
+            if envs.VLLM_MOE_SKIP_PADDING and is_forward_context_available():
+                is_padding = get_forward_context().is_padding
+                if is_padding is not None:
+                    is_padding = is_padding[:num_tokens]
 
-        shared_x_sf = None
-        shared_block_m = None
-        if self.has_fused_shared_experts:
-            shared_x_sf = symm_buffer.shared_l1_acts_sf
-            shared_block_m = deep_gemm.get_block_m_for_mega_moe(
-                get_ep_group().world_size,
-                self.num_experts,
-                symm_buffer.num_max_tokens_per_rank,
-                num_tokens,
-                self.top_k,
-                "fp8xfp4",
-            )
+            # EPLB: map logical expert IDs to physical replicas and record load.
+            eplb_state = self.eplb_state
+            if eplb_state.logical_to_physical_map is not None:
+                assert eplb_state.expert_load_view is not None
+                assert eplb_state.logical_replica_count is not None
+                assert eplb_state.should_record_tensor is not None
+                if is_padding is not None:
+                    topk_ids = torch.where(is_padding.unsqueeze(1), -1, topk_ids)
+                topk_ids = eplb_map_to_physical_and_record(
+                    topk_ids=topk_ids,
+                    expert_load_view=eplb_state.expert_load_view,
+                    logical_to_physical_map=eplb_state.logical_to_physical_map,
+                    logical_replica_count=eplb_state.logical_replica_count,
+                    record_enabled=eplb_state.should_record_tensor,
+                    num_unpadded_tokens=eplb_state.num_unpadded_tokens_tensors[
+                        dbo_current_ubatch_id()
+                    ]
+                    if eplb_state.num_unpadded_tokens_tensors is not None
+                    else None,
+                )
 
-        prepare_megamoe_inputs(
-            hidden_states,
-            topk_weights,
-            topk_ids,
-            symm_buffer.x[:num_tokens],
-            symm_buffer.x_sf[:num_tokens],
-            symm_buffer.topk_idx[:num_tokens],
-            symm_buffer.topk_weights[:num_tokens],
-            is_padding=is_padding,
-            shared_x_sf=shared_x_sf,
-            shared_block_m=shared_block_m,
-        )
+            shared_x_sf = None
+            shared_block_m = None
+            if self.has_fused_shared_experts:
+                shared_x_sf = symm_buffer.shared_l1_acts_sf
+                shared_block_m = deep_gemm.get_block_m_for_mega_moe(
+                    get_ep_group().world_size,
+                    self.num_experts,
+                    symm_buffer.num_max_tokens_per_rank,
+                    num_tokens,
+                    self.top_k,
+                    "fp8xfp4",
+                )
+
+            prepare_megamoe_inputs(
+                hidden_states,
+                topk_weights,
+                topk_ids,
+                symm_buffer.x[:num_tokens],
+                symm_buffer.x_sf[:num_tokens],
+                symm_buffer.topk_idx[:num_tokens],
+                symm_buffer.topk_weights[:num_tokens],
+                is_padding=is_padding,
+                shared_x_sf=shared_x_sf,
+                shared_block_m=shared_block_m,
+            )
 
         assert self._transformed_l1_weights is not None
         assert self._transformed_l2_weights is not None
@@ -944,20 +953,78 @@ class DeepseekV4MoE(nn.Module):
 
         org_shape = hidden_states.shape
         router_logits, _ = self.gate(hidden_states)
-        topk_weights, topk_ids = fused_topk_bias(
-            hidden_states=hidden_states,
-            gating_output=router_logits,
-            scoring_func=self.scoring_func,
-            e_score_correction_bias=self.gate.e_score_correction_bias.data
+        e_score_correction_bias = (
+            self.gate.e_score_correction_bias.data
             if self.gate.e_score_correction_bias is not None
-            else None,
-            topk=self.n_activated_experts,
-            renormalize=self.renormalize,
-            indices_type=self.hash_indices_dtype,
-            input_tokens=input_ids,
-            hash_indices_table=self.gate.tid2eid,
-            routed_scaling_factor=self.routed_scaling_factor,
+            else None
         )
+        prestaged = False
+        num_tokens = hidden_states.shape[0]
+        if (
+            envs.VLLM_DSV4_FUSE_TOPK_PREPARE
+            and self.gate.tid2eid is None
+            and self.experts.eplb_state.logical_to_physical_map is None
+            and num_tokens > 0
+            and can_use_dsv4_topk(
+                router_logits,
+                e_score_correction_bias,
+                self.n_activated_experts,
+                self.renormalize,
+                self.hash_indices_dtype,
+            )
+        ):
+            # Fuse router top-k selection into the MegaMoE input-staging
+            # kernel, removing one serialized small kernel per layer from
+            # the decode critical path. Outputs are bitwise-identical.
+            is_padding = None
+            if envs.VLLM_MOE_SKIP_PADDING and is_forward_context_available():
+                is_padding = get_forward_context().is_padding
+                if is_padding is not None:
+                    is_padding = is_padding[:num_tokens]
+            symm_buffer = self.experts.get_symm_buffer()
+            shared_x_sf = None
+            shared_block_m = None
+            if self.experts.has_fused_shared_experts:
+                from vllm.utils.deep_gemm import _import_deep_gemm
+
+                deep_gemm = _import_deep_gemm()
+                shared_x_sf = symm_buffer.shared_l1_acts_sf
+                shared_block_m = deep_gemm.get_block_m_for_mega_moe(
+                    get_ep_group().world_size,
+                    self.experts.num_experts,
+                    symm_buffer.num_max_tokens_per_rank,
+                    num_tokens,
+                    self.experts.top_k,
+                    "fp8xfp4",
+                )
+            topk_weights, topk_ids = dsv4_topk_prepare_megamoe(
+                hidden_states,
+                router_logits,
+                e_score_correction_bias,
+                self.routed_scaling_factor,
+                self.hash_indices_dtype,
+                symm_buffer.x[:num_tokens],
+                symm_buffer.x_sf[:num_tokens],
+                symm_buffer.topk_idx[:num_tokens],
+                symm_buffer.topk_weights[:num_tokens],
+                is_padding=is_padding,
+                shared_x_sf=shared_x_sf,
+                shared_block_m=shared_block_m,
+            )
+            prestaged = True
+        else:
+            topk_weights, topk_ids = fused_topk_bias(
+                hidden_states=hidden_states,
+                gating_output=router_logits,
+                scoring_func=self.scoring_func,
+                e_score_correction_bias=e_score_correction_bias,
+                topk=self.n_activated_experts,
+                renormalize=self.renormalize,
+                indices_type=self.hash_indices_dtype,
+                input_tokens=input_ids,
+                hash_indices_table=self.gate.tid2eid,
+                routed_scaling_factor=self.routed_scaling_factor,
+            )
         activation_clamp = (
             float(self.swiglu_limit) if self.swiglu_limit is not None else None
         )
@@ -966,6 +1033,7 @@ class DeepseekV4MoE(nn.Module):
             topk_weights,
             topk_ids,
             activation_clamp=activation_clamp,
+            prestaged=prestaged,
         )
 
         if (
