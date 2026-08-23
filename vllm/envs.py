@@ -209,6 +209,7 @@ if TYPE_CHECKING:
     ] = "relax"
     VLLM_USE_FUSED_MOE_GROUPED_TOPK: bool = True
     VLLM_MOE_SKIP_PADDING: bool = True
+    VLLM_DSV4_DEFER_COMPRESS_JOIN: bool = True
     VLLM_KIMI_K3_SHARD_SP_SHARED_EXPERT: bool = False
     VLLM_KIMI_K3_AUX_ATTN_RES_STREAM: bool = False
     VLLM_KIMI_K3_GEMM_AR: bool = True
@@ -1596,6 +1597,16 @@ environment_variables: dict[str, Callable[[], Any]] = {
     # ids to -1 so the dispatch and experts drop them. Requires a MoE kernel that
     # treats topk_id == -1 as a skip sentinel
     "VLLM_MOE_SKIP_PADDING": lambda: bool(int(os.getenv("VLLM_MOE_SKIP_PADDING", "1"))),
+    # DeepSeek V4 only. Defer the compressor aux-stream join past the layer's
+    # sparse-attention region instead of joining before it. The compressed-KV
+    # rows written in this step are only readable from the next step onward
+    # (attention/indexer read ranges are bounded by step-start seq lens), so
+    # the join can be moved off the pre-attention critical path. This hides
+    # the C4 group-close kernel (~13 us per C4A layer every 4th decode step)
+    # under the attention chain. Set to 0 to join before attention as before.
+    "VLLM_DSV4_DEFER_COMPRESS_JOIN": lambda: bool(
+        int(os.getenv("VLLM_DSV4_DEFER_COMPRESS_JOIN", "1"))
+    ),
     # Kimi-K3 only. Under sequence-parallel MoE the dense and shared-expert MLPs
     # are replicated on every rank, so each rank streams the whole weight to
     # serve its own token shard. Shard them across TP instead: the MLP then

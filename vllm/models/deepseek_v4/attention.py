@@ -14,7 +14,10 @@ import torch.nn.functional as F
 from transformers import DeepseekV2Config, DeepseekV3Config
 
 import vllm.envs as envs
-from vllm.compilation.breakable_cudagraph import eager_break_during_capture
+from vllm.compilation.breakable_cudagraph import (
+    BreakableCUDAGraphCapture,
+    eager_break_during_capture,
+)
 from vllm.model_executor.layers.linear import (
     ColumnParallelLinear,
     MergedColumnParallelLinear,
@@ -382,6 +385,7 @@ class DeepseekV4Attention(nn.Module, AttentionLayerBase, ABC):
             self.eps,
         )
 
+        self._defer_compress_join = False
         self._prepare_and_attn_fn(
             hidden_states,
             qr,
@@ -395,7 +399,14 @@ class DeepseekV4Attention(nn.Module, AttentionLayerBase, ABC):
         o = o_padded[:, : self.n_local_heads, :]
 
         # Inverse-RoPE + wo_a + wo_b output projection (platform-specific).
-        return self._o_proj(o, positions)
+        ret = self._o_proj(o, positions)
+        if self._defer_compress_join:
+            # Join the deferred compressor at the very end of this layer's
+            # attention module: the compressed-KV rows written in this step
+            # are only readable from the next step onward.
+            torch.cuda.current_stream().wait_event(self.ln_events[2])
+            self._defer_compress_join = False
+        return ret
 
     @eager_break_during_capture
     def _prepare_and_attn_eager(
@@ -458,24 +469,54 @@ class DeepseekV4Attention(nn.Module, AttentionLayerBase, ABC):
         # indexer. ROCm runs the same work sequentially without aux streams.
         if indexer is not None:
             assert compressor is not None
-            q, (indexer_inputs, _) = execute_in_parallel(
-                project_query_and_cache_kv,
-                [
-                    lambda: indexer(
-                        hidden_states,
-                        qr,
-                        indexer_kv_score,
-                        indexer_weights,
-                        positions,
-                        self.indexer_rotary_emb,
-                    ),
-                    lambda: compressor(kv_score, positions, self.rotary_emb),
-                ],
-                self.ln_events[0],
-                [self.ln_events[1], self.ln_events[2]],
-                [aux_streams[0], aux_streams[1]] if aux_streams is not None else None,
-                enable=aux_streams is not None,
+            indexer_fn = lambda: indexer(  # noqa: E731
+                hidden_states,
+                qr,
+                indexer_kv_score,
+                indexer_weights,
+                positions,
+                self.indexer_rotary_emb,
             )
+            if (
+                aux_streams is not None
+                and envs.VLLM_DSV4_DEFER_COMPRESS_JOIN
+                and not BreakableCUDAGraphCapture.is_active()
+            ):
+                # Fork the compressor onto aux stream 1 but defer the join to
+                # the end of this layer's attention module instead of gating
+                # the attention launch on it. The compressed KV rows written
+                # in this step are only readable from the next step onward
+                # (attention/indexer read ranges are bounded by step-start seq
+                # lens). This moves the C4 group-close kernel (~13 us per C4A
+                # layer every 4th decode step) off the critical path.
+                self._defer_compress_join = True
+                self.ln_events[0].record()
+                with torch.cuda.stream(aux_streams[1]):
+                    self.ln_events[0].wait()
+                    compressor(kv_score, positions, self.rotary_emb)
+                    self.ln_events[2].record()
+                q, (indexer_inputs, _) = execute_in_parallel(
+                    project_query_and_cache_kv,
+                    [indexer_fn, None],
+                    self.ln_events[0],
+                    [self.ln_events[1], self.ln_events[2]],
+                    [aux_streams[0], aux_streams[1]],
+                    enable=True,
+                )
+            else:
+                q, (indexer_inputs, _) = execute_in_parallel(
+                    project_query_and_cache_kv,
+                    [
+                        indexer_fn,
+                        lambda: compressor(kv_score, positions, self.rotary_emb),
+                    ],
+                    self.ln_events[0],
+                    [self.ln_events[1], self.ln_events[2]],
+                    [aux_streams[0], aux_streams[1]]
+                    if aux_streams is not None
+                    else None,
+                    enable=aux_streams is not None,
+                )
             index_q, index_q_scale, index_weights_out = indexer_inputs
         elif compressor is not None:
             aux_stream = aux_streams[0] if aux_streams is not None else None
