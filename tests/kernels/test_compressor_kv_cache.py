@@ -22,6 +22,7 @@ from vllm import _custom_ops as ops
 from vllm.models.deepseek_v4.common.ops import (
     dequantize_and_gather_k_cache,
     quantize_and_insert_k_cache,
+    save_partial_states,
 )
 from vllm.models.deepseek_v4.common.ops.fused_compress_quant_cache import (
     _fused_kv_compress_norm_rope_insert_indexer_attn,
@@ -888,6 +889,10 @@ def test_fused_kv_insert_indexer(num_tokens: int, kv_block_size: int, use_fp4: b
         state_cache,
         state_cache.stride(0),
         state_cache.stride(1),
+        state_cache,
+        state_cache.stride(0),
+        state_cache,
+        state_cache.stride(0),
         token_to_req,
         positions,
         slot_mapping,
@@ -912,6 +917,8 @@ def test_fused_kv_insert_indexer(num_tokens: int, kv_block_size: int, use_fp4: b
         TOKEN_STRIDE=TOKEN_STRIDE,
         SCALE_DIM=SCALE_DIM,
         KV_BLOCK_STRIDE=kv_cache.stride(0),
+        STATE_TRITON_BLOCK_SIZE=coff * HEAD_DIM,
+        FUSE_STATE_SAVE=False,
         num_warps=1,
     )
 
@@ -961,6 +968,143 @@ def test_fused_kv_insert_indexer(num_tokens: int, kv_block_size: int, use_fp4: b
             assert torch.equal(actual_scale, scale[i : i + 1]), (
                 f"token {i}: scale {actual_scale.item()} != {scale[i].item()}"
             )
+
+
+@pytest.mark.parametrize("path", ["indexer", "c128"])
+def test_compressor_fused_partial_state_save(path: str):
+    """Inline persistence and boundary compression match two launches exactly."""
+    head_dim = 128 if path == "indexer" else 512
+    compress_ratio = 128 if path == "c128" else 4
+    overlap = compress_ratio == 4
+    state_width = (1 + overlap) * head_dim
+    state_block_size = 8 if path == "c128" else 4
+    num_tokens = 1
+    device = "cuda"
+    torch.manual_seed(11)
+
+    positions = torch.tensor([compress_ratio - 1], dtype=torch.int64, device=device)
+    slot_mapping = positions.clone()
+    token_to_req = torch.zeros(num_tokens, dtype=torch.int32, device=device)
+    num_state_blocks = (compress_ratio + state_block_size - 1) // state_block_size
+    block_table = torch.arange(
+        num_state_blocks, dtype=torch.int32, device=device
+    ).unsqueeze(0)
+    fused_state = torch.randn(
+        num_state_blocks,
+        state_block_size,
+        2 * state_width,
+        dtype=torch.float32,
+        device=device,
+    )
+    reference_state = fused_state.clone()
+    kv_score = torch.randn(
+        num_tokens, 2 * state_width, dtype=torch.float32, device=device
+    )
+    ape = torch.randn(compress_ratio, state_width, dtype=torch.float32, device=device)
+    rms_weight = torch.randn(head_dim, dtype=torch.bfloat16, device=device)
+    cos_sin_cache = torch.randn(256, 64, dtype=torch.float32, device=device)
+    kv_slot_mapping = torch.zeros(num_tokens, dtype=torch.int64, device=device)
+    kv_block_size = 64
+    kv_blocks = 1
+    cache_width = 132 if path == "indexer" else 584
+    fused_cache = torch.zeros(
+        kv_blocks, kv_block_size, cache_width, dtype=torch.uint8, device=device
+    )
+    reference_cache = fused_cache.clone()
+
+    if path != "indexer":
+        pytest.importorskip("cutlass")
+        from vllm.models.deepseek_v4.nvidia.ops.sparse_attn_compress_cutedsl import (
+            split_kv_compress_norm_rope_insert_sparse_attn_cutedsl,
+        )
+
+    def run_compressor(
+        state_cache: torch.Tensor,
+        kv_cache: torch.Tensor,
+        fuse_state_save: bool,
+    ) -> None:
+        if path == "indexer":
+            compress_norm_rope_store_triton(
+                state_cache=state_cache,
+                num_actual=num_tokens,
+                token_to_req_indices=token_to_req,
+                positions=positions,
+                slot_mapping=slot_mapping,
+                block_table=block_table,
+                block_size=state_block_size,
+                state_width=state_width,
+                cos_sin_cache=cos_sin_cache,
+                kv_cache=kv_cache,
+                k_cache_metadata=SimpleNamespace(slot_mapping=kv_slot_mapping),
+                pdl_kwargs={},
+                head_dim=head_dim,
+                rope_head_dim=64,
+                compress_ratio=compress_ratio,
+                overlap=overlap,
+                use_fp4_cache=False,
+                rms_norm_weight=rms_weight,
+                rms_norm_eps=1e-6,
+                quant_block=128,
+                token_stride=128,
+                scale_dim=4,
+                kv_score=kv_score,
+                ape=ape,
+                fuse_state_save=fuse_state_save,
+            )
+            return
+
+        common_args = {
+            "head_size": head_dim,
+            "state_width": state_width,
+            "rope_head_dim": 64,
+            "fp8_max": 448.0,
+            "quant_block": 64,
+            "token_stride": 576,
+            "scale_dim": 8,
+            "compress_ratio": compress_ratio,
+            "overlap": overlap,
+            "fuse_state_save": fuse_state_save,
+        }
+        compressed_kv = torch.empty(
+            num_tokens, head_dim, dtype=torch.float32, device=device
+        )
+        split_kv_compress_norm_rope_insert_sparse_attn_cutedsl(
+            state_cache,
+            kv_score,
+            ape,
+            token_to_req,
+            positions,
+            slot_mapping,
+            block_table,
+            state_block_size,
+            compressed_kv,
+            rms_weight,
+            1e-6,
+            cos_sin_cache,
+            kv_cache,
+            kv_slot_mapping,
+            kv_block_size,
+            kv_cache.stride(0),
+            **common_args,
+        )
+
+    kv, score = kv_score.split(state_width, dim=-1)
+    save_partial_states(
+        kv=kv,
+        score=score,
+        ape=ape,
+        positions=positions,
+        state_cache=reference_state,
+        slot_mapping=slot_mapping,
+        block_size=state_block_size,
+        state_width=state_width,
+        compress_ratio=compress_ratio,
+    )
+    run_compressor(reference_state, reference_cache, fuse_state_save=False)
+    run_compressor(fused_state, fused_cache, fuse_state_save=True)
+
+    torch.testing.assert_close(fused_state, reference_state, rtol=0, atol=0)
+    assert torch.equal(fused_cache, reference_cache)
 
 
 @pytest.mark.parametrize("compress_ratio", [4, 128])
@@ -1019,6 +1163,12 @@ def test_cutedsl_full_cache_store(compress_ratio: int, store_fp8: bool):
     fp8_scale = torch.tensor(
         [0.5 if store_fp8 else 1.0], dtype=torch.float32, device=device
     )
+    kv_score = torch.empty(
+        num_tokens, 2 * coff * HEAD_DIM, dtype=torch.float32, device=device
+    )
+    ape = torch.empty(
+        compress_ratio, coff * HEAD_DIM, dtype=torch.float32, device=device
+    )
 
     if compress_ratio == 4:
         fused_kv_compress_norm_rope_insert_sparse_attn_cutedsl(
@@ -1054,6 +1204,8 @@ def test_cutedsl_full_cache_store(compress_ratio: int, store_fp8: bool):
         )
         split_kv_compress_norm_rope_insert_sparse_attn_cutedsl(
             state_cache,
+            kv_score,
+            ape,
             token_to_req,
             positions,
             slot_mapping,

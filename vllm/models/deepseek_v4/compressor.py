@@ -194,7 +194,7 @@ class DeepseekCompressor(nn.Module):
     """DeepSeek V4 KV/score compressor.
 
     Owns the linear / norm / state-cache / ape state and the shared forward
-    prologue (kv/score split, save_partial_states launch). The
+    prologue (kv/score split and partial-state persistence). The
     compress → norm → RoPE → store step is dispatched to a triton kernel
     (``compress_norm_rope_store_triton``) by default, except for the NVIDIA
     head_dim=128 indexer path which uses the cutedsl kernel
@@ -345,34 +345,14 @@ class DeepseekCompressor(nn.Module):
             else {"launch_pdl": False}
         )
 
-        # Store the KV and score (with fused APE addition) in the state.
-        # NOTE: PDL is disabled — both this kernel and the compress kernels
-        # below depend on preceding kernel outputs (kv/score from the cublas
-        # GEMM; state_cache from this kernel) but neither emits/waits on PDL
-        # grid dependency primitives, so launch_pdl=True caused a
-        # read-after-write race and non-deterministic output.
-        save_partial_states(
-            kv=kv,
-            score=score,
-            ape=self.ape,
-            positions=positions,
-            state_cache=state_cache,
-            slot_mapping=slot_mapping,
-            block_size=block_size,
-            state_width=state_width,
-            compress_ratio=self.compress_ratio,
-            pdl_kwargs=pdl_kwargs,
-        )
-
         # full graph cannot branch on per-step CPU metadata after capture
-        if (
+        skip_c128_compression = (
             current_platform.is_cuda()
             and self.head_dim == 512
             and self.compress_ratio == 128
             and forward_context.cudagraph_runtime_mode != CUDAGraphMode.FULL
             and state_metadata.c128_boundary is False
-        ):
-            return
+        )
 
         # Fused: compress → RMSNorm → RoPE → FP8 quant → KV cache write.
         # RoPE requirements (kernel applies forward GPT-J style rotation):
@@ -385,6 +365,41 @@ class DeepseekCompressor(nn.Module):
         k_cache_metadata = cast(Any, attn_metadata[self.k_cache_prefix])
         k_cache_layer = self._static_forward_context[self.k_cache_prefix]
         kv_cache = k_cache_layer.kv_cache
+
+        # On SM100 batch-1 decode, the packed-cache compressor kernels already
+        # launch one CTA (indexer) or one split CTA per 64 columns (C128).
+        # Let those CTAs persist [kv, score + APE] before reading the compression
+        # window, removing a separate launch from every compressor. Multi-token
+        # calls retain the standalone launch because CUDA cannot synchronize the
+        # state writes of one token's CTA with another token's compression CTA.
+        fuse_state_save = (
+            current_platform.is_cuda()
+            and current_platform.is_device_capability_family(100)
+            and kv_cache.dtype == torch.uint8
+            and num_actual == 1
+            and (self.head_dim == 128 or self.compress_ratio == 128)
+            and not skip_c128_compression
+        )
+
+        if not fuse_state_save:
+            # NOTE: PDL is disabled — this kernel depends on the preceding
+            # projection GEMM and the compression kernel depends on this write,
+            # but neither emits/waits on PDL grid dependency primitives.
+            save_partial_states(
+                kv=kv,
+                score=score,
+                ape=self.ape,
+                positions=positions,
+                state_cache=state_cache,
+                slot_mapping=slot_mapping,
+                block_size=block_size,
+                state_width=state_width,
+                compress_ratio=self.compress_ratio,
+                pdl_kwargs=pdl_kwargs,
+            )
+
+        if skip_c128_compression:
+            return
 
         # Plain-row V4 reads a contiguous bf16 / per-tensor fp8 cache row; the
         # fp8_ds_mla path uses the UE8M0 paged uint8 layout.
@@ -429,6 +444,9 @@ class DeepseekCompressor(nn.Module):
 
         compress_norm_rope_store_fn(
             state_cache=state_cache,
+            kv_score=kv_score,
+            ape=self.ape,
+            fuse_state_save=fuse_state_save,
             num_actual=num_actual,
             token_to_req_indices=token_to_req_indices,
             positions=positions,

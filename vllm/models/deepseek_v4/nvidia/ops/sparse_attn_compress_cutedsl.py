@@ -946,15 +946,19 @@ class SparseAttnCompressC128Block8Kernel:
         self,
         head_size: int,
         state_width: int,
+        fuse_state_save: bool = False,
     ):
         self.head_dim = head_size
         self.num_splits = head_size // self.head_tile
         self.state_width = state_width
+        self.fuse_state_save = fuse_state_save
 
     @cute.jit
     def __call__(
         self,
         state_cache: cute.Tensor,
+        kv_score: cute.Tensor,
+        ape: cute.Tensor,
         token_to_req_indices: cute.Tensor,
         positions: cute.Tensor,
         slot_mapping: cute.Tensor,
@@ -965,6 +969,8 @@ class SparseAttnCompressC128Block8Kernel:
         grid = (slot_mapping.shape[0] * self.num_splits, 1, 1)
         self.kernel(
             state_cache,
+            kv_score,
+            ape,
             token_to_req_indices,
             positions,
             slot_mapping,
@@ -976,6 +982,8 @@ class SparseAttnCompressC128Block8Kernel:
     def kernel(
         self,
         state_cache: cute.Tensor,
+        kv_score: cute.Tensor,
+        ape: cute.Tensor,
         token_to_req_indices: cute.Tensor,
         positions: cute.Tensor,
         slot_mapping: cute.Tensor,
@@ -1006,6 +1014,24 @@ class SparseAttnCompressC128Block8Kernel:
         slot_id = cute.arch.shuffle_sync(slot_id, offset=0)
         position = cute.arch.shuffle_sync(position, offset=0)
         req_idx = cute.arch.shuffle_sync(req_idx, offset=0)
+
+        if const_expr(self.fuse_state_save):
+            store_active = slot_id >= Int64(0) and has_position
+            if store_active and tid < self.head_tile:
+                state_block_idx = slot_id // Int64(self.state_block_size)
+                state_pos_in_block = slot_id - state_block_idx * Int64(
+                    self.state_block_size
+                )
+                state_row = state_cache[state_block_idx, state_pos_in_block, None]
+                col = split_idx * self.head_tile + tid
+                ape_row = position % Int64(self.compress_ratio)
+                state_row[col] = kv_score[token_idx, col]
+                state_row[self.state_width + col] = (
+                    kv_score[token_idx, self.state_width + col] + ape[ape_row, col]
+                )
+            # Each split CTA only consumes the 64 columns it persisted.
+            cute.arch.sync_threads()
+
         boundary = has_position and (
             (position + Int64(1)) % Int64(self.compress_ratio) == Int64(0)
         )
@@ -1188,6 +1214,7 @@ class SparseAttnCompressC128Block8Kernel:
     def compile(
         head_size: int = 512,
         state_width: int = 512,
+        fuse_state_save: bool = False,
     ):
         if head_size % SparseAttnCompressC128Block8Kernel.head_tile != 0:
             raise ValueError("head_size must be divisible by the 64-wide head tile.")
@@ -1209,6 +1236,18 @@ class SparseAttnCompressC128Block8Kernel:
             ),
             assumed_align=16,
         )
+        kv_score = cute.runtime.make_fake_tensor(
+            Float32,
+            (num_slots, state_cache_width),
+            stride=(cute.sym_int64(divisibility=16), 1),
+            assumed_align=16,
+        )
+        ape = cute.runtime.make_fake_tensor(
+            Float32,
+            (SparseAttnCompressC128Block8Kernel.compress_ratio, state_width),
+            stride=(state_width, 1),
+            assumed_align=16,
+        )
         token_to_req_indices = make_fake_tensor(
             Int32, (num_req_indices,), divisibility=4
         )
@@ -1227,11 +1266,14 @@ class SparseAttnCompressC128Block8Kernel:
         kernel = SparseAttnCompressC128Block8Kernel(
             head_size,
             state_width,
+            fuse_state_save,
         )
         stream = cute.runtime.make_fake_stream(use_tvm_ffi_env_stream=True)
         return cute.compile(
             kernel,
             state_cache,
+            kv_score,
+            ape,
             token_to_req_indices,
             positions,
             slot_mapping,
@@ -1812,6 +1854,7 @@ def compile_split_sparse_attn_cutedsl(
     rms_norm_weight_dtype: torch.dtype,
     store_full_kv: bool = False,
     store_full_fp8: bool = False,
+    fuse_state_save: bool = False,
 ):
     if not (
         head_size == 512
@@ -1828,6 +1871,7 @@ def compile_split_sparse_attn_cutedsl(
     compress = SparseAttnCompressC128Block8Kernel.compile(
         head_size=head_size,
         state_width=state_width,
+        fuse_state_save=fuse_state_save,
     )
     norm_weight_dtype = _TORCH_TO_CUTE[rms_norm_weight_dtype]
     if store_full_kv:
@@ -1862,6 +1906,8 @@ def compile_split_sparse_attn_cutedsl(
 
 def split_kv_compress_norm_rope_insert_sparse_attn_cutedsl(
     state_cache: torch.Tensor,
+    kv_score: torch.Tensor,
+    ape: torch.Tensor,
     token_to_req_indices: torch.Tensor,
     positions: torch.Tensor,
     slot_mapping: torch.Tensor,
@@ -1887,6 +1933,7 @@ def split_kv_compress_norm_rope_insert_sparse_attn_cutedsl(
     store_full_kv: bool = False,
     store_full_fp8: bool = False,
     fp8_scale: torch.Tensor | None = None,
+    fuse_state_save: bool = False,
 ) -> None:
     if k_cache.ndim != 3:
         raise ValueError(
@@ -1924,9 +1971,12 @@ def split_kv_compress_norm_rope_insert_sparse_attn_cutedsl(
         rms_norm_weight.dtype,
         store_full_kv=store_full_kv,
         store_full_fp8=store_full_fp8,
+        fuse_state_save=fuse_state_save,
     )
     compress(
         state_cache,
+        kv_score,
+        ape,
         token_to_req_indices,
         positions,
         slot_mapping,
@@ -2073,6 +2123,9 @@ def fused_kv_compress_norm_rope_insert_sparse_attn_cutedsl(
 
 def compress_norm_rope_store_cutedsl(
     state_cache: torch.Tensor,
+    kv_score: torch.Tensor,
+    ape: torch.Tensor,
+    fuse_state_save: bool,
     num_actual: int,
     token_to_req_indices: torch.Tensor,
     positions: torch.Tensor,
@@ -2136,6 +2189,8 @@ def compress_norm_rope_store_cutedsl(
         )
         split_kv_compress_norm_rope_insert_sparse_attn_cutedsl(
             state_cache,
+            kv_score,
+            ape,
             token_to_req_indices,
             positions,
             slot_mapping,
@@ -2161,4 +2216,5 @@ def compress_norm_rope_store_cutedsl(
             store_full_kv=store_full_kv,
             store_full_fp8=store_full_fp8,
             fp8_scale=fp8_scale,
+            fuse_state_save=fuse_state_save,
         )

@@ -58,6 +58,9 @@ def compress_norm_rope_store_triton(
     quant_block: int,
     token_stride: int,
     scale_dim: int,
+    kv_score: torch.Tensor | None = None,
+    ape: torch.Tensor | None = None,
+    fuse_state_save: bool = False,
 ) -> None:
     """Shared triton launcher for the fused compress+norm+RoPE+insert path.
 
@@ -77,11 +80,30 @@ def compress_norm_rope_store_triton(
         num_warps = 1
         kernel_kwargs = {}
 
+    state_save_args: tuple[Any, ...] = ()
+    state_save_kwargs: dict[str, Any] = {}
+    if head_dim != 512:
+        if fuse_state_save and (kv_score is None or ape is None):
+            raise ValueError("Fused state save requires kv_score and ape tensors.")
+        state_input = state_cache if kv_score is None else kv_score
+        ape_input = state_cache if ape is None else ape
+        state_save_args = (
+            state_input,
+            state_input.stride(0),
+            ape_input,
+            ape_input.stride(0),
+        )
+        state_save_kwargs = {
+            "STATE_TRITON_BLOCK_SIZE": triton.next_power_of_2(state_width),
+            "FUSE_STATE_SAVE": fuse_state_save,
+        }
+
     kernel[(num_actual,)](
         # state cache
         state_cache,
         state_cache.stride(0),
         state_cache.stride(1),
+        *state_save_args,
         # metadata
         token_to_req_indices,
         positions,
@@ -112,6 +134,7 @@ def compress_norm_rope_store_triton(
         SCALE_DIM=scale_dim,
         KV_BLOCK_STRIDE=kv_cache.stride(0),
         num_warps=num_warps,
+        **state_save_kwargs,
         **kernel_kwargs,
         **pdl_kwargs,
     )
@@ -611,6 +634,9 @@ def compress_norm_rope_store_two_stage_triton(
     scale_dim: int,
     num_decode_tokens: int,
     compress_scratch: torch.Tensor,
+    kv_score: torch.Tensor | None = None,
+    ape: torch.Tensor | None = None,
+    fuse_state_save: bool = False,
 ) -> None:
     """Two-stage split compressor dispatch for head=512 cr>=128 (no-overlap)
 
@@ -670,6 +696,48 @@ def compress_norm_rope_store_two_stage_triton(
         )
 
 
+@triton.jit
+def _save_partial_state_inline(
+    state_cache_ptr,
+    state_cache_stride0,
+    state_cache_stride1,
+    kv_score_ptr,
+    kv_score_stride,
+    ape_ptr,
+    ape_stride,
+    token_idx,
+    slot_id,
+    position,
+    block_size,
+    STATE_WIDTH: tl.constexpr,
+    STATE_TRITON_BLOCK_SIZE: tl.constexpr,
+    COMPRESS_RATIO: tl.constexpr,
+):
+    """Persist one [kv, score + APE] row inside a compressor program."""
+    state_block_idx = slot_id // block_size
+    state_pos_in_block = slot_id % block_size
+    state_row = (
+        state_cache_ptr
+        + state_block_idx.to(tl.int64) * state_cache_stride0
+        + state_pos_in_block * state_cache_stride1
+    )
+    offsets = tl.arange(0, STATE_TRITON_BLOCK_SIZE)
+    mask = offsets < STATE_WIDTH
+    input_row = kv_score_ptr + token_idx * kv_score_stride
+    kv_state = tl.load(input_row + offsets, mask=mask)
+    score_state = tl.load(input_row + STATE_WIDTH + offsets, mask=mask)
+    ape_row = (position % COMPRESS_RATIO) * ape_stride
+    ape_state = tl.load(ape_ptr + ape_row + offsets, mask=mask)
+    tl.store(state_row + offsets, kv_state, mask=mask)
+    tl.store(
+        state_row + STATE_WIDTH + offsets,
+        score_state + ape_state,
+        mask=mask,
+    )
+    # Boundary tokens immediately gather the row written by this program.
+    tl.debug_barrier()
+
+
 # =============================================================================
 # Indexer path (head=128, all FP8, single quant block)
 # =============================================================================
@@ -679,6 +747,10 @@ def _fused_kv_compress_norm_rope_insert_indexer_attn(
     state_cache_ptr,
     state_cache_stride0,
     state_cache_stride1,
+    kv_score_ptr,
+    kv_score_stride,
+    ape_ptr,
+    ape_stride,
     # ── metadata ──
     token_to_req_indices_ptr,
     positions_ptr,
@@ -708,6 +780,8 @@ def _fused_kv_compress_norm_rope_insert_indexer_attn(
     TOKEN_STRIDE: tl.constexpr,  # 128 for indexer
     SCALE_DIM: tl.constexpr,  # 4 for indexer (1 float32)
     KV_BLOCK_STRIDE: tl.constexpr,
+    STATE_TRITON_BLOCK_SIZE: tl.constexpr,
+    FUSE_STATE_SAVE: tl.constexpr,
 ):
     """Fused compress → RMSNorm → RoPE → FP8 quant → store.
 
@@ -728,6 +802,24 @@ def _fused_kv_compress_norm_rope_insert_indexer_attn(
         return
 
     position = tl.load(positions_ptr + token_idx)
+    if FUSE_STATE_SAVE:
+        _save_partial_state_inline(
+            state_cache_ptr,
+            state_cache_stride0,
+            state_cache_stride1,
+            kv_score_ptr,
+            kv_score_stride,
+            ape_ptr,
+            ape_stride,
+            token_idx,
+            slot_id,
+            position,
+            block_size,
+            STATE_WIDTH,
+            STATE_TRITON_BLOCK_SIZE,
+            COMPRESS_RATIO,
+        )
+
     if (position + 1) % COMPRESS_RATIO != 0:
         return
 
@@ -856,6 +948,10 @@ def _fused_kv_compress_norm_rope_insert_indexer_mxfp4_attn(
     state_cache_ptr,
     state_cache_stride0,
     state_cache_stride1,
+    kv_score_ptr,
+    kv_score_stride,
+    ape_ptr,
+    ape_stride,
     # ── metadata ──
     token_to_req_indices_ptr,
     positions_ptr,
@@ -885,6 +981,8 @@ def _fused_kv_compress_norm_rope_insert_indexer_mxfp4_attn(
     TOKEN_STRIDE: tl.constexpr,  # HEAD_SIZE // 2 = 64 packed bytes/token
     SCALE_DIM: tl.constexpr,  # HEAD_SIZE // QUANT_BLOCK = 4 ue8m0 bytes/token
     KV_BLOCK_STRIDE: tl.constexpr,
+    STATE_TRITON_BLOCK_SIZE: tl.constexpr,
+    FUSE_STATE_SAVE: tl.constexpr,
 ):
     """Fused compress → RMSNorm → RoPE → MXFP4 quant → store.
 
@@ -907,6 +1005,24 @@ def _fused_kv_compress_norm_rope_insert_indexer_mxfp4_attn(
         return
 
     position = tl.load(positions_ptr + token_idx)
+    if FUSE_STATE_SAVE:
+        _save_partial_state_inline(
+            state_cache_ptr,
+            state_cache_stride0,
+            state_cache_stride1,
+            kv_score_ptr,
+            kv_score_stride,
+            ape_ptr,
+            ape_stride,
+            token_idx,
+            slot_id,
+            position,
+            block_size,
+            STATE_WIDTH,
+            STATE_TRITON_BLOCK_SIZE,
+            COMPRESS_RATIO,
+        )
+
     if (position + 1) % COMPRESS_RATIO != 0:
         return
 
