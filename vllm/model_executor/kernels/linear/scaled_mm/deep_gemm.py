@@ -12,11 +12,13 @@ from vllm.model_executor.layers.quantization.utils.fp8_utils import (
 from vllm.model_executor.layers.quantization.utils.quant_utils import (
     GroupShape,
     QuantKey,
+    kFp8Dynamic128PackedUe8m0,
     kFp8Dynamic128Sym,
 )
 from vllm.model_executor.utils import replace_parameter
 from vllm.platforms import current_platform
 from vllm.utils.deep_gemm import (
+    DeepGemmQuantScaleFMT,
     fp8_gemm_nt,
     is_deep_gemm_e8m0_used,
     is_deep_gemm_supported,
@@ -46,7 +48,15 @@ class DeepGemmFp8BlockScaledMMKernel(Fp8BlockScaledMMLinearKernel):
         )
 
     def input_quant_key(self) -> QuantKey | None:
-        if self.config.activation_quant_key == kFp8Dynamic128Sym:
+        """Accept the exact activation layout emitted by upstream fusions."""
+        use_e8m0 = getattr(self, "use_deep_gemm_e8m0", False)
+        if (
+            use_e8m0
+            and envs.VLLM_USE_DEEP_GEMM_TMA_ALIGNED_SCALES
+            and DeepGemmQuantScaleFMT.from_oracle() == DeepGemmQuantScaleFMT.UE8M0
+        ):
+            return kFp8Dynamic128PackedUe8m0
+        if not use_e8m0 and self.config.activation_quant_key == kFp8Dynamic128Sym:
             return kFp8Dynamic128Sym
         return None
 

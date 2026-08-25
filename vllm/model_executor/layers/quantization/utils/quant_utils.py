@@ -220,6 +220,15 @@ kNvfp4Static = QuantKey(
 kDynamic128Scale = ScaleDesc(torch.float32, False, GroupShape(1, 128))
 kFp8Dynamic128Sym = QuantKey(FP8_DTYPE, kDynamic128Scale, symmetric=True)
 
+# DeepGEMM on Blackwell consumes four dynamic UE8M0 scale bytes packed into
+# each INT32, with the token dimension stored MN-major and aligned to four
+# rows.  Keep this distinct from kFp8Dynamic128Sym: its logical granularity is
+# the same, but handing packed scales to a float-scale backend is invalid.
+kDynamic128PackedUe8m0Scale = ScaleDesc(torch.int32, False, GroupShape(1, 128))
+kFp8Dynamic128PackedUe8m0 = QuantKey(
+    FP8_DTYPE, kDynamic128PackedUe8m0Scale, symmetric=True
+)
+
 kStatic128BlockScale = ScaleDesc(torch.float32, True, GroupShape(128, 128))
 kFp8Static128BlockSym = QuantKey(FP8_DTYPE, kStatic128BlockScale, symmetric=True)
 

@@ -43,6 +43,7 @@ from vllm.model_executor.layers.fusion.quant_activation import (
     expose_input_quant_key,
 )
 from vllm.model_executor.layers.quantization.utils.quant_utils import (
+    kFp8Dynamic128PackedUe8m0,
     kFp8Dynamic128Sym,
     kFp8Static128BlockSym,
     kFp8StaticTensorSym,
@@ -139,6 +140,26 @@ def test_deepgemm_custom_op_hides_compiler_scale_storage_padding(monkeypatch):
     assert received_scale is not None
     assert received_scale.shape == (3, 1)
     assert received_scale.stride() == input_scale.stride()
+
+
+def test_deepgemm_advertises_packed_ue8m0_layout(monkeypatch):
+    kernel = _probe(DeepGemmFp8BlockScaledMMKernel)
+    kernel.use_deep_gemm_e8m0 = True
+    monkeypatch.setattr(deep_gemm.envs, "VLLM_USE_DEEP_GEMM_TMA_ALIGNED_SCALES", True)
+    monkeypatch.setattr(
+        deep_gemm.DeepGemmQuantScaleFMT,
+        "from_oracle",
+        classmethod(lambda cls: cls.UE8M0),
+    )
+
+    assert kernel.input_quant_key() == kFp8Dynamic128PackedUe8m0
+
+    monkeypatch.setattr(
+        deep_gemm.DeepGemmQuantScaleFMT,
+        "from_oracle",
+        classmethod(lambda cls: cls.FLOAT32),
+    )
+    assert kernel.input_quant_key() is None
 
 
 def test_supporting_backend_declares_consume_via_helper():

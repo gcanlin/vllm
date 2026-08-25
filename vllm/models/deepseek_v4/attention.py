@@ -15,14 +15,22 @@ from transformers import DeepseekV2Config, DeepseekV3Config
 
 import vllm.envs as envs
 from vllm.compilation.breakable_cudagraph import eager_break_during_capture
+from vllm.model_executor.layers.fusion.quant_activation import QuantizedActivation
 from vllm.model_executor.layers.linear import (
     ColumnParallelLinear,
     MergedColumnParallelLinear,
     ReplicatedLinear,
     RowParallelLinear,
 )
+from vllm.model_executor.layers.quantization.utils.quant_utils import (
+    QuantKey,
+    kFp8Dynamic128PackedUe8m0,
+)
 from vllm.model_executor.layers.sparse_attn_indexer import SparseAttnIndexer
-from vllm.models.common.ops import fused_q_kv_rmsnorm
+from vllm.models.common.ops import (
+    fused_q_kv_rmsnorm,
+    fused_q_kv_rmsnorm_fp8_quant,
+)
 from vllm.models.deepseek_v4.common.ops import (
     fused_indexer_q_rope_quant,
 )
@@ -295,6 +303,30 @@ class DeepseekV4Attention(nn.Module, AttentionLayerBase, ABC):
                 aux_stream=indexer_aux_stream,
             )
 
+        # DeepGEMM on Blackwell can consume the packed UE8M0 activation that
+        # the fused Q/KV RMSNorm emits.  C4 layers only enable the fast path
+        # when both Q projections advertise the identical layout, allowing
+        # the main attention and Lightning Indexer to share one quantization.
+        self.qr_input_quant_key: QuantKey | None = getattr(
+            self.wq_b, "input_quant_key", None
+        )
+        if self.qr_input_quant_key != kFp8Dynamic128PackedUe8m0 or (
+            self.indexer is not None
+            and getattr(self.indexer.wq_b, "input_quant_key", None)
+            != self.qr_input_quant_key
+        ):
+            self.qr_input_quant_key = None
+        elif self.indexer is not None:
+            logger.info_once(
+                "Using fused Q/KV RMSNorm + shared packed FP8 Q input for "
+                "DeepSeek-V4 attention and Lightning Indexer."
+            )
+        else:
+            logger.info_once(
+                "Using fused Q/KV RMSNorm + packed FP8 Q input for "
+                "DeepSeek-V4 attention."
+            )
+
         self._prepare_and_attn_fn = self._prepare_and_attn
         if not vllm_config.use_v2_model_runner:
             # MRV1's piecewise capture only tolerates the wide eager region: with
@@ -374,17 +406,28 @@ class DeepseekV4Attention(nn.Module, AttentionLayerBase, ABC):
             self._run_parallel_input_projections(hidden_states)
         )
         qr, kv = qr_kv.split([self.q_lora_rank, self.head_dim], dim=-1)
-        qr, kv = fused_q_kv_rmsnorm(
-            qr,
-            kv,
-            self.q_norm.weight.data,
-            self.kv_norm.weight.data,
-            self.eps,
-        )
+        qr_scale: torch.Tensor | None = None
+        if self.qr_input_quant_key is not None:
+            qr, qr_scale, kv = fused_q_kv_rmsnorm_fp8_quant(
+                qr,
+                kv,
+                self.q_norm.weight.data,
+                self.kv_norm.weight.data,
+                self.eps,
+            )
+        else:
+            qr, kv = fused_q_kv_rmsnorm(
+                qr,
+                kv,
+                self.q_norm.weight.data,
+                self.kv_norm.weight.data,
+                self.eps,
+            )
 
         self._prepare_and_attn_fn(
             hidden_states,
             qr,
+            qr_scale,
             kv,
             kv_score,
             indexer_kv_score,
@@ -402,6 +445,7 @@ class DeepseekV4Attention(nn.Module, AttentionLayerBase, ABC):
         self,
         hidden_states: torch.Tensor,
         qr: torch.Tensor,
+        qr_scale: torch.Tensor | None,
         kv: torch.Tensor,
         kv_score: torch.Tensor,
         indexer_kv_score: torch.Tensor,
@@ -417,6 +461,7 @@ class DeepseekV4Attention(nn.Module, AttentionLayerBase, ABC):
         self._prepare_and_attn(
             hidden_states,
             qr,
+            qr_scale,
             kv,
             kv_score,
             indexer_kv_score,
@@ -429,6 +474,7 @@ class DeepseekV4Attention(nn.Module, AttentionLayerBase, ABC):
         self,
         hidden_states: torch.Tensor,
         qr: torch.Tensor,
+        qr_scale: torch.Tensor | None,
         kv: torch.Tensor,
         kv_score: torch.Tensor,
         indexer_kv_score: torch.Tensor,
@@ -445,8 +491,19 @@ class DeepseekV4Attention(nn.Module, AttentionLayerBase, ABC):
         compressor = self.compressor
         aux_streams = self.aux_stream_list
 
+        qr_input: torch.Tensor | QuantizedActivation = qr
+        if qr_scale is not None:
+            assert self.qr_input_quant_key is not None
+            qr_input = QuantizedActivation(
+                data=qr,
+                scale=qr_scale,
+                orig_dtype=hidden_states.dtype,
+                orig_shape=torch.Size((qr.shape[0], self.q_lora_rank)),
+                quant_key=self.qr_input_quant_key,
+            )
+
         def project_query_and_cache_kv() -> torch.Tensor:
-            q = self.wq_b(qr).view(-1, self.n_local_heads, self.head_dim)
+            q = self.wq_b(qr_input).view(-1, self.n_local_heads, self.head_dim)
             return self._fused_qnorm_rope_kv_insert(q, kv, positions, attn_metadata)
 
         index_q: torch.Tensor | None = None
@@ -463,7 +520,7 @@ class DeepseekV4Attention(nn.Module, AttentionLayerBase, ABC):
                 [
                     lambda: indexer(
                         hidden_states,
-                        qr,
+                        qr_input,
                         indexer_kv_score,
                         indexer_weights,
                         positions,
@@ -883,7 +940,7 @@ class DeepseekV4Indexer(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        qr: torch.Tensor,
+        qr: torch.Tensor | QuantizedActivation,
         compressed_kv_score: torch.Tensor,
         indexer_weights: torch.Tensor,
         positions: torch.Tensor,

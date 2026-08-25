@@ -13,7 +13,13 @@ from __future__ import annotations
 import pytest
 import torch
 
-from vllm.models.common.ops import fused_q_kv_rmsnorm
+from vllm.model_executor.layers.quantization.utils.fp8_utils import (
+    per_token_group_quant_fp8_packed_for_deepgemm,
+)
+from vllm.models.common.ops import (
+    fused_q_kv_rmsnorm,
+    fused_q_kv_rmsnorm_fp8_quant,
+)
 from vllm.platforms import current_platform
 
 pytestmark = pytest.mark.skipif(
@@ -49,6 +55,32 @@ def test_fused_q_kv_rmsnorm_correctness(num_tokens: int, dtype: torch.dtype):
     tol = dict(rtol=1e-2, atol=1e-2)
     torch.testing.assert_close(qr_out, qr_ref, **tol)
     torch.testing.assert_close(kv_out, kv_ref, **tol)
+
+
+@pytest.mark.parametrize("num_tokens", [1, 2, 4, 17, 128])
+def test_fused_q_kv_rmsnorm_fp8_quant_matches_unfused(num_tokens: int):
+    """The fast path must preserve the BF16 quantization boundary exactly."""
+    torch.manual_seed(0)
+    device = "cuda"
+    q_size, kv_size = 1024, 512
+    qr = torch.randn(num_tokens, q_size, dtype=torch.bfloat16, device=device)
+    kv = torch.randn(num_tokens, kv_size, dtype=torch.bfloat16, device=device)
+    qw = torch.randn(q_size, dtype=torch.bfloat16, device=device)
+    kvw = torch.randn(kv_size, dtype=torch.bfloat16, device=device)
+
+    qr_ref, kv_ref = fused_q_kv_rmsnorm(qr, kv, qw, kvw, 1e-6)
+    q_ref, scale_ref = per_token_group_quant_fp8_packed_for_deepgemm(
+        qr_ref, group_size=128, use_ue8m0=True
+    )
+    q_fused, scale_fused, kv_fused = fused_q_kv_rmsnorm_fp8_quant(qr, kv, qw, kvw, 1e-6)
+
+    assert q_fused.shape == qr.shape
+    assert q_fused.dtype == torch.float8_e4m3fn
+    assert scale_fused.shape == (num_tokens, q_size // 128 // 4)
+    assert scale_fused.stride() == (1, ((num_tokens + 3) // 4) * 4)
+    torch.testing.assert_close(kv_fused, kv_ref, rtol=0, atol=0)
+    torch.testing.assert_close(q_fused.float(), q_ref.float(), rtol=0, atol=0)
+    torch.testing.assert_close(scale_fused, scale_ref, rtol=0, atol=0)
 
 
 @pytest.mark.parametrize("num_tokens", [65535, 65536, 131072])
