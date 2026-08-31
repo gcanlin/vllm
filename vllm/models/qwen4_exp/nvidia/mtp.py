@@ -19,7 +19,6 @@ import regex as re
 import torch
 from torch import nn
 
-from vllm.compilation.decorators import support_torch_compile
 from vllm.config import VllmConfig, replace, set_current_vllm_config
 from vllm.distributed import get_pp_group
 from vllm.model_executor.layers.fused_moe.utils import (
@@ -52,7 +51,7 @@ from vllm.transformers_utils.configs.qwen4_exp import (
 from .hyperconnection import GatedResidual, HyperConnectionConfig
 from .low_latency_gemm import enable_qwen4_exp_low_latency_gemm
 from .model import (
-    _HC_WEIGHTS_MAPPER,
+    _EXTRA_WEIGHTS_MAPPER,
     _QWEN4_EXP_IGNORED_MISSING_SUFFIXES,
     Qwen4ExpDecoderLayer,
     Qwen4ExpMixtureOfExperts,
@@ -188,17 +187,8 @@ def _make_draft_vllm_config(
     return draft_vllm_config
 
 
-@support_torch_compile(
-    dynamic_arg_dims={
-        "input_ids": 0,
-        "positions": -1,
-        "intermediate_tensors": 0,
-        "inputs_embeds": 0,
-        "hidden_states": 0,
-    }
-)
 class Qwen4ExpMultiTokenPredictor(nn.Module):
-    hf_to_vllm_mapper = Qwen3_5Model.hf_to_vllm_mapper | _HC_WEIGHTS_MAPPER
+    hf_to_vllm_mapper = Qwen3_5Model.hf_to_vllm_mapper | _EXTRA_WEIGHTS_MAPPER
 
     def __init__(self, *, vllm_config: VllmConfig, prefix: str = "") -> None:
         super().__init__()
@@ -397,15 +387,6 @@ class Qwen4ExpMultiTokenPredictor(nn.Module):
         return loader.load_weights(weights, mapper=mapper)
 
 
-@support_torch_compile(
-    dynamic_arg_dims={
-        "input_ids": 0,
-        "positions": -1,
-        "intermediate_tensors": 0,
-        "inputs_embeds": 0,
-        "hidden_states": 0,
-    }
-)
 class Qwen4ExpMTP(nn.Module, SupportsPP, Qwen4ExpMixtureOfExperts):
     packed_modules_mapping = {
         "qkv_proj": ["q_proj", "k_proj", "v_proj"],
