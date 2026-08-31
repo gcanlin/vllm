@@ -9,6 +9,7 @@ from vllm.models.qwen4_exp.nvidia.ops.hc import (
     hc_combine,
     hc_combine_norm,
     hc_gate_mix,
+    hc_up_gate_mix,
 )
 from vllm.platforms import current_platform
 from vllm.triton_utils import HAS_TRITON
@@ -44,6 +45,34 @@ def test_hc_gate_mix() -> None:
     gate = torch.randn(2, HYPER_HIDDEN_SIZE, dtype=torch.bfloat16, device="cuda")
 
     actual = hc_gate_mix(x, gate, HC)
+    expected = (
+        torch.sigmoid(gate.float().unflatten(-1, (HC, HIDDEN_SIZE)))
+        * x.float().unflatten(-1, (HC, HIDDEN_SIZE))
+    ).mean(-2)
+
+    torch.testing.assert_close(actual, expected.to(torch.bfloat16))
+
+
+@pytest.mark.parametrize("num_tokens", [1, 2, 8, 16, 32, 33])
+def test_hc_up_gate_mix_matches_reference(num_tokens: int) -> None:
+    torch.manual_seed(0)
+    x = torch.randn(
+        num_tokens,
+        HYPER_HIDDEN_SIZE,
+        dtype=torch.bfloat16,
+        device="cuda",
+    )
+    lora = torch.randn(num_tokens, 320, dtype=torch.bfloat16, device="cuda")
+    weight = torch.randn(
+        HYPER_HIDDEN_SIZE,
+        320,
+        dtype=torch.bfloat16,
+        device="cuda",
+    )
+    weight.mul_(0.05)
+
+    actual = hc_up_gate_mix(x, lora, weight, HC)
+    gate = torch.nn.functional.linear(lora, weight)
     expected = (
         torch.sigmoid(gate.float().unflatten(-1, (HC, HIDDEN_SIZE)))
         * x.float().unflatten(-1, (HC, HIDDEN_SIZE))

@@ -3,7 +3,9 @@
 """NVIDIA HyperConnection kernels for Qwen4Exp."""
 
 import torch
+import torch.nn.functional as F
 
+import vllm.envs as envs
 from vllm.platforms import current_platform
 from vllm.triton_utils import tl, triton
 from vllm.utils.torch_utils import direct_register_custom_op
@@ -183,6 +185,78 @@ def _hc_gate_mix(x: torch.Tensor, gate: torch.Tensor, hc_count: int) -> torch.Te
         launch_pdl=current_platform.is_arch_support_pdl(),
     )
     return out
+
+
+def _can_fuse_hc_up_gate_mix(
+    x: torch.Tensor,
+    lora: torch.Tensor,
+    weight: torch.Tensor,
+    hc_count: int,
+) -> bool:
+    from .hc_up_gate_mix_cutedsl import (
+        HC_UP_GATE_MIX_CONFIGS,
+        hc_up_gate_mix_cutedsl,
+    )
+
+    return (
+        not envs.VLLM_BATCH_INVARIANT
+        and current_platform.is_device_capability((10, 0))
+        and hc_up_gate_mix_cutedsl.is_available()
+        and x.dtype == lora.dtype == weight.dtype == torch.bfloat16
+        and x.is_cuda
+        and lora.is_cuda
+        and weight.is_cuda
+        and x.device == lora.device == weight.device
+        and x.ndim == lora.ndim == weight.ndim == 2
+        and x.shape[0] == lora.shape[0]
+        and x.shape[1] == weight.shape[0]
+        and lora.shape[1] == weight.shape[1] == 320
+        and x.shape[1] == 10240
+        and hc_count == 4
+        and x.is_contiguous()
+        and lora.is_contiguous()
+        and weight.is_contiguous()
+        and x.shape[0] in HC_UP_GATE_MIX_CONFIGS
+    )
+
+
+def _hc_up_gate_mix(
+    x: torch.Tensor,
+    lora: torch.Tensor,
+    weight: torch.Tensor,
+    hc_count: int,
+) -> torch.Tensor:
+    if not _can_fuse_hc_up_gate_mix(x, lora, weight, hc_count):
+        if envs.VLLM_BATCH_INVARIANT:
+            from vllm.model_executor.determinism.batch_invariant import (
+                linear_batch_invariant,
+            )
+
+            gate = linear_batch_invariant(lora, weight)
+        else:
+            gate = F.linear(lora, weight)
+        return _hc_gate_mix(x, gate, hc_count)
+
+    from .hc_up_gate_mix_cutedsl import (
+        HC_UP_GATE_MIX_CONFIGS,
+        hc_up_gate_mix_cutedsl,
+    )
+
+    return hc_up_gate_mix_cutedsl(
+        x,
+        lora,
+        weight,
+        HC_UP_GATE_MIX_CONFIGS[x.shape[0]],
+    )
+
+
+def request_hc_up_gate_mix_warmup(dtype: torch.dtype) -> None:
+    if dtype != torch.bfloat16 or not current_platform.is_device_capability((10, 0)):
+        return
+    from .hc_up_gate_mix_cutedsl import hc_up_gate_mix_cutedsl
+
+    if hc_up_gate_mix_cutedsl.is_available():
+        hc_up_gate_mix_cutedsl.request_warmup_configs(dtype)
 
 
 @triton.jit
@@ -386,6 +460,16 @@ def _hc_gate_mix_fake(
     return x.new_empty((x.shape[0], x.shape[1] // hc_count))
 
 
+def _hc_up_gate_mix_fake(
+    x: torch.Tensor,
+    lora: torch.Tensor,
+    weight: torch.Tensor,
+    hc_count: int,
+) -> torch.Tensor:
+    del lora, weight
+    return x.new_empty((x.shape[0], x.shape[1] // hc_count))
+
+
 def _hc_combine_fake(
     residual: torch.Tensor,
     block_output: torch.Tensor,
@@ -424,6 +508,11 @@ direct_register_custom_op(
     fake_impl=_hc_gate_mix_fake,
 )
 direct_register_custom_op(
+    op_name="qwen4_exp_hc_up_gate_mix",
+    op_func=_hc_up_gate_mix,
+    fake_impl=_hc_up_gate_mix_fake,
+)
+direct_register_custom_op(
     op_name="qwen4_exp_hc_combine",
     op_func=_hc_combine,
     fake_impl=_hc_combine_fake,
@@ -447,6 +536,15 @@ def hc_silu(x: torch.Tensor, hc_count: int) -> torch.Tensor:
 
 def hc_gate_mix(x: torch.Tensor, gate: torch.Tensor, hc_count: int) -> torch.Tensor:
     return torch.ops.vllm.qwen4_exp_hc_gate_mix(x, gate, hc_count)
+
+
+def hc_up_gate_mix(
+    x: torch.Tensor,
+    lora: torch.Tensor,
+    weight: torch.Tensor,
+    hc_count: int,
+) -> torch.Tensor:
+    return torch.ops.vllm.qwen4_exp_hc_up_gate_mix(x, lora, weight, hc_count)
 
 
 def hc_combine(
@@ -484,4 +582,6 @@ __all__ = [
     "hc_combine_norm",
     "hc_gate_mix",
     "hc_silu",
+    "hc_up_gate_mix",
+    "request_hc_up_gate_mix_warmup",
 ]

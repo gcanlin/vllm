@@ -39,8 +39,9 @@ from .ops.hc import (
     grouped_gemma_rmsnorm,
     hc_combine,
     hc_combine_norm,
-    hc_gate_mix,
     hc_silu,
+    hc_up_gate_mix,
+    request_hc_up_gate_mix_warmup,
 )
 
 
@@ -57,9 +58,9 @@ class GatedResidual(nn.Module):
     ``use_combine=False`` and do not produce a new injection.
 
     Weights: the norm owns the grouped GemmaRMSNorm affine; the projections
-    are vLLM Linear modules (merged replicated linear for down+inject), so
-    GEMM dispatch (e.g. the low-latency skinny GEMM) applies through the
-    standard quant_method mechanism.
+    are vLLM Linear modules (merged replicated linear for down+inject). The HC
+    up projection and gated mean use a fused decode path when available; all
+    other projections use standard vLLM Linear modules.
     """
 
     def __init__(
@@ -123,6 +124,7 @@ class GatedResidual(nn.Module):
             prefix=maybe_prefix(prefix, "input_mix_weight_up"),
             return_bias=False,
         )
+        request_hc_up_gate_mix_warmup(config.params_dtype)
 
     def mix(
         self, hidden_states: torch.Tensor
@@ -144,8 +146,12 @@ class GatedResidual(nn.Module):
             injection = None
 
         lora = hc_silu(lora, self.hc_count)
-        gate = self.input_mix_weight_up(lora)  # [M, D]
-        block_input = hc_gate_mix(xn, gate, self.hc_count)
+        block_input = hc_up_gate_mix(
+            xn,
+            lora,
+            self.input_mix_weight_up.weight,
+            self.hc_count,
+        )
 
         return hidden_states, block_input, injection
 
@@ -180,8 +186,12 @@ class GatedResidual(nn.Module):
             injection = None
 
         lora = hc_silu(lora, self.hc_count)
-        gate = self.input_mix_weight_up(lora)  # [M, D]
-        block_input = hc_gate_mix(xn, gate, self.hc_count)
+        block_input = hc_up_gate_mix(
+            xn,
+            lora,
+            self.input_mix_weight_up.weight,
+            self.hc_count,
+        )
 
         return hidden_states, block_input, injection
 
