@@ -428,7 +428,9 @@ class Qwen4ExpQSAAttention(Qwen3NextAttention, AttentionLayerBase):
             )
         flat_output = attn_output.view(num_tokens, -1)
         if gate is not None:
-            flat_output = flat_output * torch.sigmoid(gate)
+            from .ops.qsa import qsa_output_gate
+
+            flat_output = qsa_output_gate(flat_output, gate)
         output, _ = self.o_proj(flat_output)
         return output
 
