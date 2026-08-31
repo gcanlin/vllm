@@ -7,12 +7,61 @@ from __future__ import annotations
 import math
 
 import torch
+from torch.library import triton_op, wrap_triton
 
 from vllm.platforms import current_platform
 from vllm.triton_utils import HAS_TRITON, tl, triton
 
 _LOGITS_WORKSPACE_BYTES = 128 * 1024 * 1024
 _TOPK_WORKSPACE_BYTES = 1024 * 1024
+
+
+@triton.jit
+def _qsa_output_gate_kernel(
+    input_ptr,
+    gate_ptr,
+    output_ptr,
+    num_elements,
+    BLOCK_SIZE: tl.constexpr,
+) -> None:
+    offsets = tl.program_id(0) * BLOCK_SIZE + tl.arange(0, BLOCK_SIZE)
+    mask = offsets < num_elements
+
+    output = tl.load(input_ptr + offsets, mask=mask).to(tl.float32)
+    gate = tl.load(gate_ptr + offsets, mask=mask).to(tl.float32)
+    sigmoid_gate = tl.sigmoid(gate).to(output_ptr.dtype.element_ty)
+    gated = output * sigmoid_gate.to(tl.float32)
+
+    tl.store(output_ptr + offsets, gated, mask=mask)
+
+
+@triton_op("vllm::qwen4_exp_qsa_output_gate", mutates_args={})
+def _qsa_output_gate(output: torch.Tensor, gate: torch.Tensor) -> torch.Tensor:
+    block_size = 2048
+    gated_output = torch.empty_like(output)
+    wrap_triton(_qsa_output_gate_kernel)[(triton.cdiv(output.numel(), block_size),)](
+        output,
+        gate,
+        gated_output,
+        output.numel(),
+        BLOCK_SIZE=block_size,
+        num_warps=8,
+    )
+    return gated_output
+
+
+def qsa_output_gate(output: torch.Tensor, gate: torch.Tensor) -> torch.Tensor:
+    """Apply the QSA sigmoid output gate."""
+    if output.shape != gate.shape:
+        raise ValueError("QSA output and gate must have the same shape")
+    if output.dtype != torch.bfloat16 or gate.dtype != output.dtype:
+        raise ValueError("QSA output gating requires matching BF16 tensors")
+    if not output.is_contiguous() or not gate.is_contiguous():
+        raise ValueError("QSA output gating requires contiguous tensors")
+    if not output.numel():
+        return torch.empty_like(output)
+
+    return _qsa_output_gate(output, gate)
 
 
 @triton.jit
@@ -1109,6 +1158,7 @@ __all__ = [
     "expand_qsa_block_indices_cuda",
     "qsa_compress_groups_with_ratio",
     "qsa_mqa_paged",
+    "qsa_output_gate",
     "qsa_select_paged_tokens",
     "qsa_sparse_paged_attention",
     "qsa_store_cache_rows",

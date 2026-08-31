@@ -23,6 +23,24 @@ requires_qsa_kernels = pytest.mark.skipif(
 )
 
 
+@requires_qsa_kernels
+@pytest.mark.parametrize("num_tokens", [1, 2, 17, 257, 2048])
+def test_qsa_output_gate_matches_bf16_torch(num_tokens: int) -> None:
+    torch.manual_seed(0)
+    output = torch.randn(
+        num_tokens,
+        1536,
+        dtype=torch.bfloat16,
+        device="cuda",
+    )
+    gate = torch.randn_like(output)
+    expected = output * torch.sigmoid(gate)
+
+    actual = qsa_ops.qsa_output_gate(output, gate)
+
+    torch.testing.assert_close(actual, expected, rtol=0, atol=2**-8)
+
+
 def test_qsa_mtp_index_share_updates_cache_but_skips_selection(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
