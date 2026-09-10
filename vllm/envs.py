@@ -1626,7 +1626,11 @@ environment_variables: dict[str, Callable[[], Any]] = {
     ),
     # Use the SM100 BF16 GEMM-AR kernel for eligible Kimi-K3 row-parallel
     # attention projections. All TP ranks must belong to one NVLink domain.
-    "VLLM_KIMI_K3_GEMM_AR": lambda: bool(int(os.getenv("VLLM_KIMI_K3_GEMM_AR", "1"))),
+    # Disabled by default: per-tile flag synchronization in the fused kernel
+    # turns NVLink peer-arrival skew into serialized GPU-busy spin time, and
+    # measured end-to-end performance is much worse than the unfused
+    # GEMM + one-shot AR path (see PR description of the disabling change).
+    "VLLM_KIMI_K3_GEMM_AR": lambda: bool(int(os.getenv("VLLM_KIMI_K3_GEMM_AR", "0"))),
     # Use the SM100 BF16 GEMM-RS kernel for eligible Kimi-K3 sequence-parallel
     # row-parallel projections. All TP ranks must belong to one NVLink domain.
     "VLLM_KIMI_K3_GEMM_RS": lambda: bool(int(os.getenv("VLLM_KIMI_K3_GEMM_RS", "0"))),
