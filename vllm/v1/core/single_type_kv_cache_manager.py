@@ -1469,7 +1469,9 @@ class MambaManager(SingleTypeKVCacheManager):
         assert isinstance(kv_cache_spec, MambaSpec), (
             "MambaManager can only be used for mamba groups"
         )
-        assert dcp_world_size == 1, "DCP not support mamba now."
+        # Mamba state is replicated across DCP ranks (each rank holds the full
+        # recurrent state and the DCP block_size scaling is undone in
+        # __init__), so prefix-cache lookup is DCP-invariant.
         assert pcp_world_size == 1, "PCP not support mamba now."
         block_hashes = resolve_block_hashes(
             block_hashes,
