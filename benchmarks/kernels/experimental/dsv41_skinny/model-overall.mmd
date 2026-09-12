@@ -1,0 +1,25 @@
+flowchart TB
+  TOK["输入 token"] --> EMB["Embedding · BF16"]
+  EMB --> R["mHC 多路残差流"]
+  subgraph BLOCK["Decoder Block × 40（逻辑展开）"]
+    R --> EG["Engram 注入 · 仅第 1、14 层<br/>wkv：MXFP8，保留原实现"]
+    EG --> PREA["mHC pre + RMSNorm"]
+    PREA --> ATTN["稀疏 MLA Attention<br/>skinny 位置见下图"]
+    ATTN --> POSTA["mHC post / 残差混合"]
+    EG -. 残差流 .-> POSTA
+    POSTA --> PREF["mHC pre + RMSNorm"]
+    PREF --> ROUTE["Router · BF16 → FP32<br/>已有 ll_bf16，保留"]
+    PREF --> MOE["MegaMoE<br/>路由专家 + 融合 shared expert<br/>本次不替换专家 GEMM"]
+    ROUTE -->|路由权重 / 专家编号| MOE
+    MOE --> POSTF["mHC post / 残差混合"]
+    POSTA -. 残差流 .-> POSTF
+  end
+  POSTF --> NORM["最终 mHC 合并 + RMSNorm"]
+  NORM --> HEAD["lm_head · BF16<br/>CuTe skinny · M=1、2"]
+  HEAD --> OUT["Logits → 采样 → 下一 token"]
+  classDef cute fill:#dbeafe,stroke:#2563eb,color:#172554;
+  classDef keep fill:#fef3c7,stroke:#d97706,color:#78350f;
+  classDef normal fill:#f1f5f9,stroke:#64748b,color:#0f172a;
+  class HEAD cute;
+  class EG,ROUTE keep;
+  class TOK,EMB,R,PREA,ATTN,POSTA,PREF,MOE,POSTF,NORM,OUT normal;

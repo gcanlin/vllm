@@ -1,0 +1,142 @@
+[
+  {
+    "group": 1,
+    "m": 1,
+    "calls": 280
+  },
+  {
+    "group": 3,
+    "m": 1,
+    "calls": 280
+  },
+  {
+    "group": 3,
+    "m": 2,
+    "calls": 320
+  },
+  {
+    "group": 3,
+    "m": 4,
+    "calls": 240
+  },
+  {
+    "group": 4,
+    "m": 1,
+    "calls": 280
+  },
+  {
+    "group": 4,
+    "m": 2,
+    "calls": 320
+  },
+  {
+    "group": 11,
+    "m": 1,
+    "calls": 56
+  },
+  {
+    "group": 11,
+    "m": 2,
+    "calls": 64
+  },
+  {
+    "group": 11,
+    "m": 4,
+    "calls": 48
+  },
+  {
+    "group": 11,
+    "m": 8,
+    "calls": 48
+  },
+  {
+    "group": 11,
+    "m": 16,
+    "calls": 56
+  },
+  {
+    "group": 12,
+    "m": 1,
+    "calls": 28
+  },
+  {
+    "group": 12,
+    "m": 2,
+    "calls": 32
+  },
+  {
+    "group": 12,
+    "m": 4,
+    "calls": 24
+  },
+  {
+    "group": 12,
+    "m": 8,
+    "calls": 24
+  },
+  {
+    "group": 12,
+    "m": 16,
+    "calls": 28
+  },
+  {
+    "group": 13,
+    "m": 1,
+    "calls": 21
+  },
+  {
+    "group": 13,
+    "m": 2,
+    "calls": 24
+  },
+  {
+    "group": 13,
+    "m": 4,
+    "calls": 18
+  },
+  {
+    "group": 13,
+    "m": 8,
+    "calls": 18
+  },
+  {
+    "group": 13,
+    "m": 16,
+    "calls": 21
+  },
+  {
+    "group": 15,
+    "m": 1,
+    "calls": 7
+  },
+  {
+    "group": 15,
+    "m": 2,
+    "calls": 8
+  },
+  {
+    "group": 15,
+    "m": 4,
+    "calls": 6
+  },
+  {
+    "group": 15,
+    "m": 8,
+    "calls": 6
+  },
+  {
+    "group": 15,
+    "m": 16,
+    "calls": 7
+  },
+  {
+    "group": 16,
+    "m": 1,
+    "calls": 2
+  },
+  {
+    "group": 16,
+    "m": 2,
+    "calls": 2
+  }
+]

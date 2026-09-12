@@ -1,0 +1,24 @@
+{
+  "time_utc": "2026-09-12T16:01:30.306773+00:00",
+  "hostname": "xb01-gpu-200b-0030",
+  "cwd": "/gpfs/mszn/workspace/vllm",
+  "python": "/tmp/dsv41-index-reuse-venv/bin/python3",
+  "venv": "/tmp/dsv41-index-reuse-venv",
+  "vllm": "/gpfs/mszn/workspace/vllm/vllm/__init__.py",
+  "torch": "2.13.0+cu130",
+  "cuda": "13.0",
+  "native_build": "e7edf17cea217e52701f913cd8491fcacf2d9490",
+  "source_head": "30aa0ade39ab6625674865f578fae19a49cf3e43",
+  "source_diff_sha256": "38e9651feeb59ecb7884ccc579d3e576b4a350342185a2b1ec1d7bf045f0b420",
+  "port_8032_free": true,
+  "gpus": [
+    "0, 0, 0",
+    "1, 0, 0",
+    "2, 0, 0",
+    "3, 0, 0",
+    "4, 0, 0",
+    "5, 0, 0",
+    "6, 0, 0",
+    "7, 0, 0"
+  ]
+}

@@ -1,0 +1,36 @@
+flowchart TB
+  X["Attention 输入 X · BF16"]
+  X --> WQA["fused_wqa_wkv · MXFP8<br/>Triton SIMT · M=1"]
+  WQA --> QR["Q latent · RMSNorm<br/>融合 MXFP8 量化"]
+  WQA --> KV["当前 KV · RMSNorm / RoPE"]
+  QR --> WQB["主 wq_b · MXFP8<br/>保留原实现"]
+  WQB --> Q["Q norm / RoPE"]
+  KV --> SWA["本层 sliding-window KV cache"]
+  X --> COMP["compressor 投影 · BF16 → FP32<br/>ratio-1 / ratio-2 两类<br/>CuTe dotprod · M=1、2、4"]
+  COMP --> LAT["压缩 / RMSNorm → BF16 latent"]
+  LAT --> CC["压缩 KV cache<br/>source 发布，后续层复用"]
+  LAT --> WK["indexer.wk · BF16<br/>CuTe skinny · M=1、2、4"]
+  WK --> IK["Indexer K cache<br/>norm / RoPE / 存储；跨层复用"]
+  QR --> IQ["indexer.wq_b · MXFP8<br/>保留；后接 norm / RoPE / 量化"]
+  X --> IW["indexer.weights_proj · BF16<br/>CuTe：M=1、2<br/>Triton：M=4"]
+  IQ --> TOP["索引打分 / Top-k<br/>index source 发布，后续层复用"]
+  IK --> TOP
+  IW --> TOP
+  Q --> SA["稀疏 Attention<br/>读取 SWA + 选中的压缩 KV<br/>融合 kernel，本次不替换"]
+  SWA --> SA
+  CC --> SA
+  TOP --> SA
+  SA --> INV["inverse-RoPE + MXFP8 量化"]
+  INV --> WOA["wo_a · MXFP8<br/>Triton SIMT · M=1、2、4"]
+  WOA --> WOB["wo_b · MXFP8<br/>Triton SIMT · M=1、2"]
+  WOB --> Y["Attention 输出 · BF16"]
+  classDef triton fill:#ffedd5,stroke:#ea580c,color:#7c2d12;
+  classDef cute fill:#dbeafe,stroke:#2563eb,color:#172554;
+  classDef mixed fill:#ede9fe,stroke:#7c3aed,color:#4c1d95;
+  classDef keep fill:#fef3c7,stroke:#d97706,color:#78350f;
+  classDef normal fill:#f1f5f9,stroke:#64748b,color:#0f172a;
+  class WQA,INV,WOA,WOB triton;
+  class COMP,WK cute;
+  class IW mixed;
+  class WQB,IQ keep;
+  class X,QR,KV,Q,SWA,LAT,CC,IK,TOP,SA,Y normal;

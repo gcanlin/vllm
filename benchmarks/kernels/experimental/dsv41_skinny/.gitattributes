@@ -1,0 +1,4 @@
+# Keep archived evidence byte-for-byte, including original log/patch whitespace.
+*.json -text linguist-generated
+*.log -text -whitespace linguist-generated
+*.patch -text -whitespace

@@ -1,0 +1,225 @@
+{
+  "label": "bench-lowm",
+  "mode": "candidate",
+  "command": [
+    "bash",
+    "/gpfs/mszn/workspace/dsv41-skinny-full-20260912/serve-lowm.sh"
+  ],
+  "started": 1789228169.900656,
+  "native_build": "e7edf17cea217e52701f913cd8491fcacf2d9490",
+  "source_head": "30aa0ade39ab6625674865f578fae19a49cf3e43",
+  "source_diff_sha256": "38e9651feeb59ecb7884ccc579d3e576b4a350342185a2b1ec1d7bf045f0b420",
+  "scripts": {
+    "screen.py": "4cd3a238b5bbeeee05ff4996fca88c708f10860c33e457462b8518d946dd0b89",
+    "confirm.py": "7e37050a3dbac81901fc745a4e35a4a1e58659c80a94451e6b91a8991f3ca817",
+    "run_bench_lowm.py": "9093600af64cbe8607838d16a3fba549fc1783ee3dababe1907e03b9dc9c929b",
+    "kernels.py": "d3addf0a7ae45de87a9c60f34b3c30a7fc198495ffb2ccc06fd9cbf514a2c991",
+    "run_bench.py": "884f65ce1e88d7fdd1478274f981b43bad21df4fb113c0566bb0ae756e0d8eee",
+    "screen_cute_mx.py": "4423dbc6a7a1f4d183e10de8852d1bec35a963deb848ebb2c64bc978f68baab3",
+    "lowm_worker.py": "81d9da014869241326a3f8f30143f9b63dd09e8a452e2af3176e5ae79e98e59c",
+    "cute_mx.py": "2ddab035bdbcb5104f302440676b53b83e59ef999d0c4fce57f25022738355a8",
+    "summarize.py": "bc24cb82fb21ea830fa2a9bc086595afb3b5ca61cf18196dac4a5f19f85951f1",
+    "cute_mx_kernel.py": "74d5c4643dd0a3d8bba4c8f877856bb3a09037ecd0b31fcd248a8e1e54b7d10b",
+    "final_check.py": "158a0ab69797f22e00c0516ac470fd899424d2d5977ba2972e9753b9650718bd",
+    "skinny_worker.py": "09ff9f73ff3a795feade5541ef5e64d6e7631ef15ce4aefb2a3b5f62dfcc400e",
+    "dispatch.py": "aeb3932cfa28c574a0f7c12754038969de54a0965eb32eedc44698939cb34ffb",
+    "screen_woa.py": "f490ff1aba6e2d3852170672eed0e9ac417410dffedf730a2ecd7c8c13b33c1d",
+    "woa_ops.py": "8f599565d7ae5ddb54507e370a41e9cb2819d1a8978af215189b247439191502",
+    "serve.sh": "7287863a418a8d0e6fcfbfa981a09b1bb8d12a07db8052190ad9922e8607a304",
+    "serve-lowm.sh": "15819ac6e64d5c3b400c873c9562c0b395bd9a99f24d51ad4ded85cb07ae8af1"
+  },
+  "bench_sha256": "84835687fcbb0ac7f3e4cb2497255a1f59234aedf7452879326d5c8dfc46e94e",
+  "workloads": [
+    [
+      "1k256-c1",
+      1024,
+      256,
+      1,
+      8
+    ],
+    [
+      "1k256-c4",
+      1024,
+      256,
+      4,
+      32
+    ],
+    [
+      "8k1k-c16",
+      8192,
+      1024,
+      16,
+      100
+    ]
+  ],
+  "clients": [
+    {
+      "name": "warm-c64",
+      "command": [
+        "bash",
+        "/gpfs/mszn/workspace/dsv41-shared-vllm-bench-20260912/bench.sh",
+        "1024",
+        "32",
+        "64",
+        "128",
+        "warm-c64.json"
+      ],
+      "throughput": 1287.647538732869,
+      "tpot": 27.70970542482129,
+      "ttft": 712.1556533566036
+    },
+    {
+      "name": "warm-c16",
+      "command": [
+        "bash",
+        "/gpfs/mszn/workspace/dsv41-shared-vllm-bench-20260912/bench.sh",
+        "8192",
+        "32",
+        "16",
+        "32",
+        "warm-c16.json"
+      ],
+      "throughput": 232.6399543326188,
+      "tpot": 39.8082472240804,
+      "ttft": 935.5171052447986
+    },
+    {
+      "name": "1k256-c1-r1",
+      "command": [
+        "bash",
+        "/gpfs/mszn/workspace/dsv41-shared-vllm-bench-20260912/bench.sh",
+        "1024",
+        "256",
+        "1",
+        "8",
+        "1k256-c1-r1.json"
+      ],
+      "throughput": 131.71047446139272,
+      "tpot": 7.184120191389002,
+      "ttft": 111.63237219443545
+    },
+    {
+      "name": "1k256-c4-r1",
+      "command": [
+        "bash",
+        "/gpfs/mszn/workspace/dsv41-shared-vllm-bench-20260912/bench.sh",
+        "1024",
+        "256",
+        "4",
+        "32",
+        "1k256-c4-r1.json"
+      ],
+      "throughput": 462.2088113911037,
+      "tpot": 7.901390971742598,
+      "ttft": 199.9288192455424
+    },
+    {
+      "name": "8k1k-c16-r1",
+      "command": [
+        "bash",
+        "/gpfs/mszn/workspace/dsv41-shared-vllm-bench-20260912/bench.sh",
+        "8192",
+        "1024",
+        "16",
+        "100",
+        "8k1k-c16-r1.json"
+      ],
+      "throughput": 1446.14272265619,
+      "tpot": 9.38329731566897,
+      "ttft": 755.9848304046318
+    },
+    {
+      "name": "1k256-c1-r2",
+      "command": [
+        "bash",
+        "/gpfs/mszn/workspace/dsv41-shared-vllm-bench-20260912/bench.sh",
+        "1024",
+        "256",
+        "1",
+        "8",
+        "1k256-c1-r2.json"
+      ],
+      "throughput": 131.8233835494833,
+      "tpot": 7.177451704560286,
+      "ttft": 111.67147898231633
+    },
+    {
+      "name": "1k256-c4-r2",
+      "command": [
+        "bash",
+        "/gpfs/mszn/workspace/dsv41-shared-vllm-bench-20260912/bench.sh",
+        "1024",
+        "256",
+        "4",
+        "32",
+        "1k256-c4-r2.json"
+      ],
+      "throughput": 460.8230052730097,
+      "tpot": 7.935281590514077,
+      "ttft": 197.92882571346126
+    },
+    {
+      "name": "8k1k-c16-r2",
+      "command": [
+        "bash",
+        "/gpfs/mszn/workspace/dsv41-shared-vllm-bench-20260912/bench.sh",
+        "8192",
+        "1024",
+        "16",
+        "100",
+        "8k1k-c16-r2.json"
+      ],
+      "throughput": 1447.2995049849092,
+      "tpot": 9.375966024937387,
+      "ttft": 752.7902974793687
+    },
+    {
+      "name": "1k256-c1-r3",
+      "command": [
+        "bash",
+        "/gpfs/mszn/workspace/dsv41-shared-vllm-bench-20260912/bench.sh",
+        "1024",
+        "256",
+        "1",
+        "8",
+        "1k256-c1-r3.json"
+      ],
+      "throughput": 131.8152368509334,
+      "tpot": 7.173338921069551,
+      "ttft": 112.83832220942713
+    },
+    {
+      "name": "1k256-c4-r3",
+      "command": [
+        "bash",
+        "/gpfs/mszn/workspace/dsv41-shared-vllm-bench-20260912/bench.sh",
+        "1024",
+        "256",
+        "4",
+        "32",
+        "1k256-c4-r3.json"
+      ],
+      "throughput": 460.87163477798885,
+      "tpot": 7.932918404363662,
+      "ttft": 198.26753940287745
+    },
+    {
+      "name": "8k1k-c16-r3",
+      "command": [
+        "bash",
+        "/gpfs/mszn/workspace/dsv41-shared-vllm-bench-20260912/bench.sh",
+        "8192",
+        "1024",
+        "16",
+        "100",
+        "8k1k-c16-r3.json"
+      ],
+      "throughput": 1446.2041608087247,
+      "tpot": 9.3901034978852,
+      "ttft": 754.9852372449823
+    }
+  ],
+  "completed": true,
+  "ended": 1789228834.0332408,
+  "server_exit_code": 0
+}

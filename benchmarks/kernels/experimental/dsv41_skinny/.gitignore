@@ -1,0 +1,6 @@
+!*.json
+!*.log
+/weights/
+/__pycache__/
+/manual/
+/new-*/

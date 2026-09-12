@@ -1,0 +1,194 @@
+{
+  "1": {
+    "spec": {
+      "kind": "simt",
+      "config": {
+        "bm": 1,
+        "bn": 1,
+        "warps": 4
+      }
+    },
+    "baseline_us": 7.926025947967133,
+    "candidate_us": 4.414960935518339,
+    "gain": 0.44297924779684983,
+    "timings": {
+      "baseline": [
+        7.926025947967133,
+        7.926025947967133,
+        7.930597701630035
+      ],
+      "candidate": [
+        4.415168777688757,
+        4.414960935518339,
+        4.40976604238733
+      ]
+    },
+    "errors": [
+      {
+        "scale": 0.0,
+        "rmse": 0.0,
+        "max_abs": 0.0,
+        "finite": true
+      },
+      {
+        "scale": 1e-05,
+        "rmse": 0.0,
+        "max_abs": 0.0,
+        "finite": true
+      },
+      {
+        "scale": 0.1,
+        "rmse": 0.00024523696629330516,
+        "max_abs": 0.0009765625,
+        "finite": true
+      },
+      {
+        "scale": 1.0,
+        "rmse": 4.940059383784501e-08,
+        "max_abs": 1.9073486328125e-06,
+        "finite": true
+      },
+      {
+        "scale": 10.0,
+        "rmse": 0.0,
+        "max_abs": 0.0,
+        "finite": true
+      },
+      {
+        "scale": 100.0,
+        "rmse": 0.0,
+        "max_abs": 0.0,
+        "finite": true
+      }
+    ],
+    "scope": "full inverse-RoPE chain"
+  },
+  "2": {
+    "spec": {
+      "kind": "simt",
+      "config": {
+        "bm": 1,
+        "bn": 4,
+        "warps": 4
+      }
+    },
+    "baseline_us": 7.916674985514058,
+    "candidate_us": 5.138285748370282,
+    "gain": 0.3509540611718527,
+    "timings": {
+      "baseline": [
+        7.916674985514058,
+        7.9212467391769605,
+        7.906077744124771
+      ],
+      "candidate": [
+        5.135792029368413,
+        5.138285748370282,
+        5.146805342141684
+      ]
+    },
+    "errors": [
+      {
+        "scale": 0.0,
+        "rmse": 0.0,
+        "max_abs": 0.0,
+        "finite": true
+      },
+      {
+        "scale": 1e-05,
+        "rmse": 0.0,
+        "max_abs": 0.0,
+        "finite": true
+      },
+      {
+        "scale": 0.1,
+        "rmse": 0.00017891729658003896,
+        "max_abs": 0.0009765625,
+        "finite": true
+      },
+      {
+        "scale": 1.0,
+        "rmse": 4.406179414218059e-06,
+        "max_abs": 0.000244140625,
+        "finite": true
+      },
+      {
+        "scale": 10.0,
+        "rmse": 0.0,
+        "max_abs": 0.0,
+        "finite": true
+      },
+      {
+        "scale": 100.0,
+        "rmse": 0.0,
+        "max_abs": 0.0,
+        "finite": true
+      }
+    ],
+    "scope": "full inverse-RoPE chain"
+  },
+  "4": {
+    "spec": {
+      "kind": "simt",
+      "config": {
+        "bm": 4,
+        "bn": 2,
+        "warps": 4
+      }
+    },
+    "baseline_us": 7.9347529968658055,
+    "candidate_us": 6.52155860677942,
+    "gain": 0.17810187546412481,
+    "timings": {
+      "baseline": [
+        7.935792594761043,
+        7.934129857397699,
+        7.9347529968658055
+      ],
+      "candidate": [
+        6.523013114929199,
+        6.520934693225018,
+        6.52155860677942
+      ]
+    },
+    "errors": [
+      {
+        "scale": 0.0,
+        "rmse": 0.0,
+        "max_abs": 0.0,
+        "finite": true
+      },
+      {
+        "scale": 1e-05,
+        "rmse": 0.0,
+        "max_abs": 0.0,
+        "finite": true
+      },
+      {
+        "scale": 0.1,
+        "rmse": 0.0,
+        "max_abs": 0.0,
+        "finite": true
+      },
+      {
+        "scale": 1.0,
+        "rmse": 0.0,
+        "max_abs": 0.0,
+        "finite": true
+      },
+      {
+        "scale": 10.0,
+        "rmse": 1.8620017527837263e-08,
+        "max_abs": 1.52587890625e-05,
+        "finite": true
+      },
+      {
+        "scale": 100.0,
+        "rmse": 3.2523443223908544e-05,
+        "max_abs": 0.25,
+        "finite": true
+      }
+    ],
+    "scope": "full inverse-RoPE chain"
+  }
+}

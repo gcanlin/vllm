@@ -1,0 +1,154 @@
+[
+  {
+    "prompt": "The capital of France is",
+    "response": {
+      "id": "cmpl-8e14e6f529042e05",
+      "object": "text_completion",
+      "created": 1789226076,
+      "model": "dsv41-bench",
+      "choices": [
+        {
+          "index": 0,
+          "text": " Paris. The capital of France is Paris. The capital of France is Paris. The capital of France is Paris. The capital of France is Paris. The capital",
+          "logprobs": null,
+          "finish_reason": "length",
+          "stop_reason": null,
+          "token_ids": null,
+          "prompt_logprobs": null,
+          "prompt_token_ids": null,
+          "routed_experts": null
+        }
+      ],
+      "service_tier": null,
+      "system_fingerprint": "vllm-0.28.1rc1.dev718+g30aa0ade3.d20260911-tp8-ep-4e08dab0",
+      "usage": {
+        "prompt_tokens": 5,
+        "total_tokens": 37,
+        "completion_tokens": 32,
+        "prompt_tokens_details": {
+          "cached_tokens": 0,
+          "created_cache_tokens": null,
+          "multimodal_tokens": null
+        },
+        "completion_tokens_details": null
+      },
+      "kv_transfer_params": null,
+      "ec_transfer_params": null,
+      "metrics": null
+    }
+  },
+  {
+    "prompt": "Question: What is 12 times 13? Answer:",
+    "response": {
+      "id": "cmpl-88772da9e022b4a6",
+      "object": "text_completion",
+      "created": 1789226076,
+      "model": "dsv41-bench",
+      "choices": [
+        {
+          "index": 0,
+          "text": " 156. 12*13=156.",
+          "logprobs": null,
+          "finish_reason": "stop",
+          "stop_reason": null,
+          "token_ids": null,
+          "prompt_logprobs": null,
+          "prompt_token_ids": null,
+          "routed_experts": null
+        }
+      ],
+      "service_tier": null,
+      "system_fingerprint": "vllm-0.28.1rc1.dev718+g30aa0ade3.d20260911-tp8-ep-4e08dab0",
+      "usage": {
+        "prompt_tokens": 12,
+        "total_tokens": 23,
+        "completion_tokens": 11,
+        "prompt_tokens_details": {
+          "cached_tokens": 0,
+          "created_cache_tokens": null,
+          "multimodal_tokens": null
+        },
+        "completion_tokens_details": null
+      },
+      "kv_transfer_params": null,
+      "ec_transfer_params": null,
+      "metrics": null
+    }
+  },
+  {
+    "prompt": "请用一句话解释什么是光合作用。",
+    "response": {
+      "id": "cmpl-990e2f947f439eba",
+      "object": "text_completion",
+      "created": 1789226077,
+      "model": "dsv41-bench",
+      "choices": [
+        {
+          "index": 0,
+          "text": "光合作用是植物、藻类和某些细菌利用光能，将二氧化碳和水转化为有机物（如葡萄糖）和氧气的过程。",
+          "logprobs": null,
+          "finish_reason": "stop",
+          "stop_reason": null,
+          "token_ids": null,
+          "prompt_logprobs": null,
+          "prompt_token_ids": null,
+          "routed_experts": null
+        }
+      ],
+      "service_tier": null,
+      "system_fingerprint": "vllm-0.28.1rc1.dev718+g30aa0ade3.d20260911-tp8-ep-4e08dab0",
+      "usage": {
+        "prompt_tokens": 8,
+        "total_tokens": 34,
+        "completion_tokens": 26,
+        "prompt_tokens_details": {
+          "cached_tokens": 0,
+          "created_cache_tokens": null,
+          "multimodal_tokens": null
+        },
+        "completion_tokens_details": null
+      },
+      "kv_transfer_params": null,
+      "ec_transfer_params": null,
+      "metrics": null
+    }
+  },
+  {
+    "prompt": "def fibonacci(n):\n",
+    "response": {
+      "id": "cmpl-87208098c7ee2df5",
+      "object": "text_completion",
+      "created": 1789226077,
+      "model": "dsv41-bench",
+      "choices": [
+        {
+          "index": 0,
+          "text": "    if n <= 1:\n        return n\n    return fibonacci(n-1) + fibonacci(n-2)\n\n# Example usage\nprint(fibonacci",
+          "logprobs": null,
+          "finish_reason": "length",
+          "stop_reason": null,
+          "token_ids": null,
+          "prompt_logprobs": null,
+          "prompt_token_ids": null,
+          "routed_experts": null
+        }
+      ],
+      "service_tier": null,
+      "system_fingerprint": "vllm-0.28.1rc1.dev718+g30aa0ade3.d20260911-tp8-ep-4e08dab0",
+      "usage": {
+        "prompt_tokens": 4,
+        "total_tokens": 36,
+        "completion_tokens": 32,
+        "prompt_tokens_details": {
+          "cached_tokens": 0,
+          "created_cache_tokens": null,
+          "multimodal_tokens": null
+        },
+        "completion_tokens_details": null
+      },
+      "kv_transfer_params": null,
+      "ec_transfer_params": null,
+      "metrics": null
+    }
+  }
+]

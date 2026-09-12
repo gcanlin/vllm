@@ -1,0 +1,25 @@
+{
+  "rank": 3,
+  "mode": "candidate",
+  "source": "/gpfs/mszn/workspace/vllm/vllm/__init__.py",
+  "sp": true,
+  "fused_shared_layers": 40,
+  "installed": true,
+  "inventory_count": 0,
+  "details": {
+    "installed": {
+      "1": 40,
+      "4": 40,
+      "11": 8,
+      "12": 4,
+      "13": 3,
+      "15": 1,
+      "16": 1,
+      "3": 40
+    },
+    "checks": 580,
+    "max_rmse": 0.0002492281491868198
+  },
+  "variant": "max_m4",
+  "max_skinny_m": 4
+}

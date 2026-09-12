@@ -1,0 +1,26 @@
+SERVER_START bench-a 271664
+SERVER_READY bench-a
+BENCH_START bench-a warm-c64
+BENCH_DONE bench-a {"name": "warm-c64", "command": ["bash", "/gpfs/mszn/workspace/dsv41-shared-vllm-bench-20260912/bench.sh", "1024", "32", "64", "128", "warm-c64.json"], "throughput": 1248.9014918056241, "tpot": 29.28800511613043, "ttft": 709.6164030244836}
+BENCH_START bench-a warm-c16
+BENCH_DONE bench-a {"name": "warm-c16", "command": ["bash", "/gpfs/mszn/workspace/dsv41-shared-vllm-bench-20260912/bench.sh", "8192", "32", "16", "32", "warm-c16.json"], "throughput": 223.20335290651045, "tpot": 42.17516180154146, "ttft": 955.1819110565702}
+BENCH_START bench-a 1k256-c1-r1
+BENCH_DONE bench-a {"name": "1k256-c1-r1", "command": ["bash", "/gpfs/mszn/workspace/dsv41-shared-vllm-bench-20260912/bench.sh", "1024", "256", "1", "8", "1k256-c1-r1.json"], "throughput": 126.66361608255474, "tpot": 7.458238068091519, "ttft": 119.18059064191766}
+BENCH_START bench-a 1k256-c4-r1
+BENCH_DONE bench-a {"name": "1k256-c4-r1", "command": ["bash", "/gpfs/mszn/workspace/dsv41-shared-vllm-bench-20260912/bench.sh", "1024", "256", "4", "32", "1k256-c4-r1.json"], "throughput": 454.75495877401397, "tpot": 7.987526975179494, "ttft": 214.26101076212944}
+BENCH_START bench-a 8k1k-c16-r1
+BENCH_DONE bench-a {"name": "8k1k-c16-r1", "command": ["bash", "/gpfs/mszn/workspace/dsv41-shared-vllm-bench-20260912/bench.sh", "8192", "1024", "16", "100", "8k1k-c16-r1.json"], "throughput": 1434.0184080122715, "tpot": 9.425787554611382, "ttft": 793.4637440438382}
+BENCH_START bench-a 1k256-c1-r2
+BENCH_DONE bench-a {"name": "1k256-c1-r2", "command": ["bash", "/gpfs/mszn/workspace/dsv41-shared-vllm-bench-20260912/bench.sh", "1024", "256", "1", "8", "1k256-c1-r2.json"], "throughput": 126.75352066741878, "tpot": 7.451036973860955, "ttft": 119.56638339324854}
+BENCH_START bench-a 1k256-c4-r2
+BENCH_DONE bench-a {"name": "1k256-c4-r2", "command": ["bash", "/gpfs/mszn/workspace/dsv41-shared-vllm-bench-20260912/bench.sh", "1024", "256", "4", "32", "1k256-c4-r2.json"], "throughput": 458.0369487989385, "tpot": 7.979159618530414, "ttft": 200.29491845343728}
+BENCH_START bench-a 8k1k-c16-r2
+BENCH_DONE bench-a {"name": "8k1k-c16-r2", "command": ["bash", "/gpfs/mszn/workspace/dsv41-shared-vllm-bench-20260912/bench.sh", "8192", "1024", "16", "100", "8k1k-c16-r2.json"], "throughput": 1442.0620885218557, "tpot": 9.376310257613023, "ttft": 779.0949944569729}
+BENCH_START bench-a 1k256-c1-r3
+BENCH_DONE bench-a {"name": "1k256-c1-r3", "command": ["bash", "/gpfs/mszn/workspace/dsv41-shared-vllm-bench-20260912/bench.sh", "1024", "256", "1", "8", "1k256-c1-r3.json"], "throughput": 127.22106371392547, "tpot": 7.45417495787728, "ttft": 111.35118725360371}
+BENCH_START bench-a 1k256-c4-r3
+BENCH_DONE bench-a {"name": "1k256-c4-r3", "command": ["bash", "/gpfs/mszn/workspace/dsv41-shared-vllm-bench-20260912/bench.sh", "1024", "256", "4", "32", "1k256-c4-r3.json"], "throughput": 458.52925032077314, "tpot": 7.984591890086521, "ttft": 196.444525870902}
+BENCH_START bench-a 8k1k-c16-r3
+BENCH_DONE bench-a {"name": "8k1k-c16-r3", "command": ["bash", "/gpfs/mszn/workspace/dsv41-shared-vllm-bench-20260912/bench.sh", "8192", "1024", "16", "100", "8k1k-c16-r3.json"], "throughput": 1444.8459176015554, "tpot": 9.388592332735373, "ttft": 751.5554372919723}
+SERVER_STOPPED bench-a 0
+GEMM_CAMPAIGN_COMPLETE

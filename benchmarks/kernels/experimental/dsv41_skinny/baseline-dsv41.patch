@@ -1,0 +1,479 @@
+diff --git a/tests/kernels/attention/test_flashmla_sparse.py b/tests/kernels/attention/test_flashmla_sparse.py
+index fb93557a32..a9a2f2638a 100644
+--- a/tests/kernels/attention/test_flashmla_sparse.py
++++ b/tests/kernels/attention/test_flashmla_sparse.py
+@@ -486,3 +486,100 @@ def test_flashinfer_mixed_sparse_indices_separates_window_and_padded_width():
+     assert sparse_indices.shape == (1, padded_width)
+     assert sparse_indices[0].cpu().tolist() == [0, 1, 2, 3, -1, -1, -1, -1]
+     assert sparse_lens.cpu().tolist() == [padded_width]
++
++
++@pytest.mark.parametrize("compress_ratio", [1, 2])
++@pytest.mark.parametrize("num_decodes", [0, 1, 2])
++def test_dsv41_sparse_source_reuse_and_invalidation(
++    compress_ratio, num_decodes, monkeypatch
++):
++    """Reuse exact mappings, but refresh after source writes and batch changes."""
++    from types import SimpleNamespace
++
++    from vllm.models.deepseek_v4_1.nvidia import flashinfer_sparse as fi
++    from vllm.v1.attention.backends.mla.sparse_swa import DeepseekSparseSWAMetadata
++
++    monkeypatch.setenv("VLLM_DSV41_REUSE_SPARSE_INDICES", "1")
++    device = "cuda"
++    topk = torch.tensor([[0, 1], [1, 2]], dtype=torch.int32, device=device)
++    table = torch.tensor([[1], [2]], dtype=torch.int32, device=device)
++    swa = DeepseekSparseSWAMetadata(
++        block_table=table,
++        slot_mapping=torch.zeros(2, dtype=torch.int64, device=device),
++        block_size=64,
++        seq_lens=torch.tensor([8, 10], dtype=torch.int32, device=device),
++        query_start_loc=torch.arange(3, dtype=torch.int32, device=device),
++        token_to_req_indices=torch.arange(2, dtype=torch.int32, device=device),
++        decode_swa_indices=torch.tensor(
++            [[68, 69, 70, 71], [134, 135, 136, 137]],
++            dtype=torch.int32,
++            device=device,
++        )[:num_decodes],
++        decode_swa_width=4,
++        is_valid_token=torch.ones(num_decodes, dtype=torch.bool, device=device),
++        num_decodes=num_decodes,
++        num_prefills=2 - num_decodes,
++        num_decode_tokens=num_decodes,
++        num_prefill_tokens=2 - num_decodes,
++    )
++    compressed = SimpleNamespace(block_table=table, block_size=64)
++    source = object.__new__(fi.DeepseekV4FlashInferMLAAttention)
++    consumer = object.__new__(fi.DeepseekV4FlashInferMLAAttention)
++    for layer in (source, consumer):
++        layer.compress_ratio = compress_ratio
++        layer.window_size = 4
++        layer.topk_indices_buffer = topk
++        layer.index_source_layer_id = 20
++        layer.kv_source_layer_id = 20
++    source.is_index_source = True
++    consumer.is_index_source = False
++    pool = torch.empty((3, 64, 8), device=device)
++
++    def build(layer, kv=pool):
++        return layer._build_sparse_index_metadata(kv, pool, swa, compressed, False)[2:]
++
++    first = build(source)
++    reused = build(consumer)
++    assert reused[0] is first[0]
++    assert reused[1] is first[1]
++    original = first[0].clone()
++    topk.add_(1)
++    refreshed = build(source)
++    assert refreshed[0] is not first[0]
++    assert not torch.equal(refreshed[0], original)
++    assert build(consumer)[0] is refreshed[0]
++
++    # A different index source overwrites the same top-k allocation.
++    consumer.index_source_layer_id = 24
++    assert build(consumer)[0] is not refreshed[0]
++    consumer.index_source_layer_id = 20
++    # Packed page geometry must not reuse an unpacked physical mapping.
++    packed = torch.empty((3, 128, 8), device=device)[:, :64]
++    packed_result = build(consumer, packed)
++    assert not torch.equal(packed_result[0], refreshed[0])
++    # Updated block tables in the next batch must be converted again.
++    swa.flashinfer_sparse_index_cache.clear()
++    table.add_(1)
++    next_batch = build(consumer)
++    assert not torch.equal(next_batch[0], refreshed[0])
++
++    # Capture must retain the source conversion, with consumers sharing its
++    # output; replay reads fresh top-k values at the same input address.
++    for _ in range(2):
++        build(source)
++    graph = torch.cuda.CUDAGraph()
++    with torch.cuda.graph(graph):
++        captured_source = build(source)
++        captured_consumer = build(consumer)
++    assert captured_source[0] is captured_consumer[0]
++    topk.sub_(1)
++    graph.replay()
++    torch.cuda.synchronize()
++    expected = build(source)
++    torch.testing.assert_close(captured_consumer[0], expected[0], rtol=0, atol=0)
++    torch.testing.assert_close(captured_consumer[1], expected[1], rtol=0, atol=0)
++
++    monkeypatch.setenv("VLLM_DSV41_REUSE_SPARSE_INDICES", "0")
++    uncached = build(consumer)
++    assert build(consumer)[0] is not uncached[0]
++    torch.testing.assert_close(uncached[0], expected[0], rtol=0, atol=0)
+diff --git a/tests/models/test_deepseek_v4_mega_moe.py b/tests/models/test_deepseek_v4_mega_moe.py
+index 58d5239285..d40bfe10d0 100644
+--- a/tests/models/test_deepseek_v4_mega_moe.py
++++ b/tests/models/test_deepseek_v4_mega_moe.py
+@@ -370,17 +370,21 @@ def test_deepseek_v4_mega_moe_padding_preserves_weights(monkeypatch, intermediat
+     [
+         pytest.param(128, 512, 128, True, False, id="aligned-block128"),
+         pytest.param(128, 512, 128, True, True, id="aligned-block128-mxfp8"),
+-        pytest.param(5120, 2304, 32, False, False, id="deepseek-v41-flash"),
++        pytest.param(5120, 2304, 32, True, False, id="deepseek-v41-flash"),
++        pytest.param(128, 2304, 128, True, False, id="padded-block128"),
++        pytest.param(5120, 2304, 32, True, True, id="deepseek-v41-flash-mxfp8"),
++        pytest.param(128, 2304, 128, False, False, id="padded-packed-scale-fallback"),
+     ],
+ )
+ def test_deepseek_v4_mega_moe_finalizes_native_shared_expert_weights(
+     monkeypatch, hidden_size, intermediate_size, block_size, fused, mxfp8
+ ):
+-    """V4.1-Flash's routed padding must preserve the serial shared-expert fallback."""
++    """Shared fusion preserves checkpoint channels and zeros padded channels."""
+ 
+     class FakeDeepGemm:
+         transformed_dims: list[tuple[int, int]] = []
+         scale_inputs: list[tuple[int, ...]] = []
++        scale_values: list[torch.Tensor] = []
+ 
+         @staticmethod
+         def get_symm_buffer_for_mega_moe(*args, num_shared_experts=0, **kwargs):
+@@ -405,6 +409,7 @@ def test_deepseek_v4_mega_moe_finalizes_native_shared_expert_weights(
+         @classmethod
+         def transform_sf_into_required_layout(cls, sf, mn, k, *args, **kwargs):
+             cls.scale_inputs.append(tuple(sf.shape))
++            cls.scale_values.append(sf)
+             return torch.empty((sf.shape[0], mn, k // 128), dtype=torch.int32)
+ 
+         @classmethod
+@@ -432,7 +437,10 @@ def test_deepseek_v4_mega_moe_finalizes_native_shared_expert_weights(
+ 
+     def fp8_parameter(*shape):
+         return torch.nn.Parameter(
+-            torch.empty(*shape, dtype=torch.float8_e4m3fn), requires_grad=False
++            torch.empty(*shape, dtype=torch.uint8)
++            .random_(1, 119)
++            .view(torch.float8_e4m3fn),
++            requires_grad=False,
+         )
+ 
+     def scale_parameter(*shape, dtype=torch.int32):
+@@ -463,21 +471,34 @@ def test_deepseek_v4_mega_moe_finalizes_native_shared_expert_weights(
+             linear.weight_block_size = (1, 32)
+             linear.weight_scale = torch.nn.Parameter(
+                 linear.weight_scale_inv.view(torch.uint8)
+-                .repeat_interleave(128, dim=0)
+-                .repeat_interleave(4, dim=1),
++                .repeat_interleave(block_size, dim=0)
++                .repeat_interleave(block_size // 32, dim=1),
+                 requires_grad=False,
+             )
+             del linear.weight_scale_inv
++    originals = []
++    for linear in (shared_experts.gate_up_proj, shared_experts.down_proj):
++        scale = linear.weight_scale if mxfp8 else linear.weight_scale_inv
++        if not fused:
++            # Already packed scales cannot be padded as checkpoint UE8M0 bytes.
++            linear.weight_scale_inv = scale_parameter(
++                linear.weight.shape[0], linear.weight.shape[1] // 128
++            )
++            continue
++        scale.data.view(torch.uint8).random_(124, 130)
++        block_m, block_k = linear.weight_block_size
++        scale_1x32 = (
++            experts._ue8m0_uint8_to_float(scale.view(torch.uint8))
++            .repeat_interleave(block_m, dim=0)
++            .repeat_interleave(block_k // 32, dim=1)
++        )
++        originals.append((linear.weight.view(torch.uint8).clone(), scale_1x32))
+     monkeypatch.setattr("vllm.utils.deep_gemm._import_deep_gemm", lambda: FakeDeepGemm)
+ 
+     original_gate_up_ptr = shared_experts.gate_up_proj.weight.data_ptr()
+     original_down_ptr = shared_experts.down_proj.weight.data_ptr()
+     experts.finalize_weights(shared_experts)
+ 
+-    assert FakeDeepGemm.scale_inputs[-2:] == [
+-        (1, 2 * intermediate_size, hidden_size // 32),
+-        (1, hidden_size, intermediate_size // 32),
+-    ]
+     assert experts.has_fused_shared_experts is fused
+     if not fused:
+         assert experts.intermediate_size == 2560
+@@ -493,15 +514,56 @@ def test_deepseek_v4_mega_moe_finalizes_native_shared_expert_weights(
+         return
+ 
+     assert FakeDeepGemm.transformed_dims == [(3, 3), (2, 2)]
+-    assert shared_experts.gate_up_proj.weight.data_ptr() != original_gate_up_ptr
+-    assert (
+-        experts._transformed_shared_l1_weights[0].data_ptr()
+-        == shared_experts.gate_up_proj.weight.data_ptr()
+-    )
+-    assert (
+-        experts._transformed_shared_l2_weights[0].data_ptr()
+-        == shared_experts.down_proj.weight.data_ptr()
+-    )
++    padded_size = experts.intermediate_size
++    assert FakeDeepGemm.scale_inputs[-2:] == [
++        (1, 2 * padded_size, hidden_size // 32),
++        (1, hidden_size, padded_size // 32),
++    ]
++    for actual, original, fill in (
++        (
++            experts._transformed_shared_l1_weights[0].view(torch.uint8),
++            originals[0][0],
++            0,
++        ),
++        (FakeDeepGemm.scale_values[-2][0], originals[0][1], 1),
++    ):
++        actual = actual.unflatten(0, (2, padded_size))
++        assert torch.equal(
++            actual[:, :intermediate_size], original.unflatten(0, (2, intermediate_size))
++        )
++        assert torch.all(actual[:, intermediate_size:] == fill)
++    for actual, original, fill in (
++        (
++            experts._transformed_shared_l2_weights[0].view(torch.uint8),
++            originals[1][0],
++            0,
++        ),
++        (FakeDeepGemm.scale_values[-1][0], originals[1][1], 1),
++    ):
++        assert torch.equal(actual[:, : original.shape[1]], original)
++        assert torch.all(actual[:, original.shape[1] :] == fill)
++    if padded_size != intermediate_size:
++        # Generic linear post-load hooks still receive checkpoint-shaped weights.
++        for linear, (weight, _) in zip(
++            (shared_experts.gate_up_proj, shared_experts.down_proj), originals
++        ):
++            assert torch.equal(linear.weight.view(torch.uint8), weight)
++        assert shared_experts.gate_up_proj.weight.data_ptr() == original_gate_up_ptr
++        assert shared_experts.down_proj.weight.data_ptr() == original_down_ptr
++    else:
++        assert shared_experts.gate_up_proj.weight.data_ptr() != original_gate_up_ptr
++        assert (
++            experts._transformed_shared_l1_weights[0].data_ptr()
++            == shared_experts.gate_up_proj.weight.data_ptr()
++        )
++        assert (
++            experts._transformed_shared_l2_weights[0].data_ptr()
++            == shared_experts.down_proj.weight.data_ptr()
++        )
++
++    transformed_l1 = experts._transformed_shared_l1_weights
++    experts.finalize_weights(shared_experts)
++    assert experts._transformed_shared_l1_weights is transformed_l1
+ 
+ 
+ @pytest.mark.parametrize("fused", [False, True])
+diff --git a/vllm/envs.py b/vllm/envs.py
+index 40d4edb566..10f0686825 100755
+--- a/vllm/envs.py
++++ b/vllm/envs.py
+@@ -167,6 +167,7 @@ if TYPE_CHECKING:
+     VLLM_SERVER_DEV_MODE: bool = False
+     VLLM_V1_OUTPUT_PROC_CHUNK_SIZE: int = 128
+     VLLM_MLA_DISABLE: bool = False
++    VLLM_DSV41_REUSE_SPARSE_INDICES: bool = False
+     VLLM_RAY_PER_WORKER_GPUS: float = 1.0
+     VLLM_RAY_BUNDLE_INDICES: str = ""
+     VLLM_CUDART_SO_PATH: str | None = None
+@@ -1427,6 +1428,10 @@ environment_variables: dict[str, Callable[[], Any]] = {
+     ),
+     # If set, vLLM will disable the MLA attention optimizations.
+     "VLLM_MLA_DISABLE": lambda: bool(int(os.getenv("VLLM_MLA_DISABLE", "0"))),
++    # Experimental reuse within compatible DSV4.1 KV/index source groups.
++    "VLLM_DSV41_REUSE_SPARSE_INDICES": lambda: bool(
++        int(os.getenv("VLLM_DSV41_REUSE_SPARSE_INDICES", "0"))
++    ),
+     # If set, vLLM will pick up the provided Flash Attention MLA
+     # Number of GPUs per worker in Ray, if it is set to be a fraction,
+     # it allows ray to schedule multiple actors on a single GPU,
+diff --git a/vllm/models/deepseek_v4/nvidia/model.py b/vllm/models/deepseek_v4/nvidia/model.py
+index 021001b9ce..56e855391e 100644
+--- a/vllm/models/deepseek_v4/nvidia/model.py
++++ b/vllm/models/deepseek_v4/nvidia/model.py
+@@ -204,6 +204,7 @@ class DeepseekV4MegaMoEExperts(nn.Module):
+         self.top_k = top_k
+         self.hidden_size = hidden_size
+         self.intermediate_size = intermediate_size
++        self.unpadded_intermediate_size = intermediate_size
+         self.num_shared_experts = num_shared_experts
+         self.max_num_tokens = vllm_config.scheduler_config.max_num_batched_tokens
+ 
+@@ -386,6 +387,17 @@ class DeepseekV4MegaMoEExperts(nn.Module):
+         # the generic linear post-load hook replaces the raw checkpoint scales
+         # with its 128x128 DeepGEMM layout.
+         checkpoint_scale_dtypes = (torch.float8_e8m0fnu, torch.uint8)
++        unpadded_size = self.unpadded_intermediate_size * self.num_shared_experts
++        padding = self.intermediate_size * self.num_shared_experts - unpadded_size
++        pad_weights = (
++            padding > 0
++            and gate_up_weight.dtype == torch.float8_e4m3fn
++            and down_weight.dtype == torch.float8_e4m3fn
++            and gate_up_weight.shape == (2 * unpadded_size, self.hidden_size)
++            and down_weight.shape == (self.hidden_size, unpadded_size)
++            and gate_up_scale.dtype in checkpoint_scale_dtypes
++            and down_scale.dtype in checkpoint_scale_dtypes
++        )
+         if (
+             gate_up_scale.dtype in checkpoint_scale_dtypes
+             and down_scale.dtype in checkpoint_scale_dtypes
+@@ -396,6 +408,7 @@ class DeepseekV4MegaMoEExperts(nn.Module):
+                 gate_up_scale,
+                 gate_up_weight.shape[0],
+                 gate_up_weight.shape[1],
++                padding=(padding, 0) if pad_weights else (0, 0),
+             )
+             down_scale = self._prepare_shared_expert_scale(
+                 deep_gemm,
+@@ -403,12 +416,27 @@ class DeepseekV4MegaMoEExperts(nn.Module):
+                 down_scale,
+                 down_weight.shape[0],
+                 down_weight.shape[1],
++                padding=(0, padding) if pad_weights else (0, 0),
+             )
+ 
+         if gate_up_scale is None or down_scale is None:
+             self.num_shared_experts = 0
+             return
+ 
++        if pad_weights:
++            # Pad gate/up separately so the SwiGLU split stays at the midpoint.
++            gate_up_weight = (
++                torch.nn.functional.pad(
++                    gate_up_weight.view(torch.uint8).unflatten(0, (2, unpadded_size)),
++                    (0, 0, 0, padding),
++                )
++                .flatten(0, 1)
++                .view(gate_up_weight.dtype)
++            )
++            down_weight = torch.nn.functional.pad(
++                down_weight.view(torch.uint8), (0, padding)
++            ).view(down_weight.dtype)
++
+         shared_intermediate_size = self.intermediate_size * self.num_shared_experts
+         expected_gate_up_shape = (
+             2 * shared_intermediate_size,
+@@ -449,11 +477,11 @@ class DeepseekV4MegaMoEExperts(nn.Module):
+         # released instead of adding roughly 0.7 GiB per rank on DSV4-Flash.
+         # The generic linear post-load hook may still repack the serial scales,
+         # but this shared MLP is never called after native fusion is enabled.
+-        gate_up.weight.data = transformed_l1[0]
+-        self._transformed_shared_l1_weights = (
+-            gate_up.weight.data,
+-            transformed_l1[1],
+-        )
++        # Padded weights need separate storage: the generic linear post-load
++        # hooks still expect the original checkpoint weight/scale shapes.
++        if not pad_weights:
++            gate_up.weight.data = transformed_l1[0]
++        self._transformed_shared_l1_weights = transformed_l1
+         self._transformed_shared_l2_weights = transformed_l2
+ 
+     def _prepare_shared_expert_scale(
+@@ -463,6 +491,8 @@ class DeepseekV4MegaMoEExperts(nn.Module):
+         scale: torch.Tensor,
+         mn: int,
+         k: int,
++        *,
++        padding: tuple[int, int] = (0, 0),
+     ) -> torch.Tensor | None:
+         block_size = getattr(linear, "weight_block_size", None)
+         if block_size is None or len(block_size) != 2:
+@@ -497,6 +527,19 @@ class DeepseekV4MegaMoEExperts(nn.Module):
+             .repeat_interleave(block_k // 32, dim=1)[:mn, : k // 32]
+             .contiguous()
+         )
++        pad_m, pad_k = padding
++        if pad_m:
++            scale_1x32 = torch.nn.functional.pad(
++                scale_1x32.unflatten(0, (2, mn // 2)),
++                (0, 0, 0, pad_m),
++                value=1.0,
++            ).flatten(0, 1)
++            mn += 2 * pad_m
++        if pad_k:
++            scale_1x32 = torch.nn.functional.pad(
++                scale_1x32, (0, pad_k // 32), value=1.0
++            )
++            k += pad_k
+         # The grouped API is used with a singleton dimension to request the
+         # MN-major, TMA-aligned packed-UE8M0 strides, then squeezed back to the
+         # 2D layout required for a shared expert.
+diff --git a/vllm/models/deepseek_v4_1/nvidia/flashinfer_sparse.py b/vllm/models/deepseek_v4_1/nvidia/flashinfer_sparse.py
+index 802ddede9c..d8c18f999f 100644
+--- a/vllm/models/deepseek_v4_1/nvidia/flashinfer_sparse.py
++++ b/vllm/models/deepseek_v4_1/nvidia/flashinfer_sparse.py
+@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, ClassVar, cast
+ 
+ import torch
+ 
++import vllm.envs as envs
+ from vllm.config import VllmConfig
+ from vllm.config.cache import CacheDType
+ from vllm.forward_context import get_forward_context
+@@ -386,17 +387,36 @@ class DeepseekV4FlashInferMLAAttention(DeepseekV4Attention):
+         query_start_loc = swa_metadata.query_start_loc[: num_reqs + 1]
+         seq_lens = swa_metadata.seq_lens[:num_reqs]
+         assert seq_lens.dtype == torch.int32
+-        # SWA-only layers all build the same mixed sparse indices, so the first
+-        # one caches them for the step; indexer layers depend on their own topk
+-        # indices and stay uncached.
++        swa_block_span = _packed_block_span(swa_k_cache)
++        compressed_block_span = _packed_block_span(compressed_kv_cache)
++        # The SWA metadata scopes reuse to one batch and one SWA block table.
++        # Consumers of the same index/KV sources also share the compressed
++        # mapping. Include the physical layout: packed caches can have different
++        # page strides even when their logical block sizes match.
++        cache_key: str | tuple[int, ...] | None = "swa_only" if swa_only else None
++        if not swa_only and envs.VLLM_DSV41_REUSE_SPARSE_INDICES:
++            assert self.index_source_layer_id is not None
++            assert self.kv_source_layer_id is not None
++            cache_key = (
++                self.index_source_layer_id,
++                self.kv_source_layer_id,
++                id(attn_metadata),
++                id(self.topk_indices_buffer),
++                self.compress_ratio,
++                compressed_block_size,
++                compressed_block_span,
++                swa_block_span,
++                self.window_size,
++                getattr(self, "max_image_tokens", 0),
++            )
++        # A source publishes fresh top-k into the same buffer. Consumers may
++        # only reuse results from this metadata build and source publication.
+         cached_sparse = (
+-            swa_metadata.flashinfer_sparse_index_cache.get("swa_only")
+-            if swa_only
++            swa_metadata.flashinfer_sparse_index_cache.get(cache_key)
++            if cache_key is not None and (swa_only or not self.is_index_source)
+             else None
+         )
+         if cached_sparse is None:
+-            swa_block_span = _packed_block_span(swa_k_cache)
+-            compressed_block_span = _packed_block_span(compressed_kv_cache)
+             sparse_indices, sparse_topk_lens = build_flashinfer_mixed_sparse_indices(
+                 decode_swa_indices,
+                 decode_compressed_indices,
+@@ -421,8 +441,8 @@ class DeepseekV4FlashInferMLAAttention(DeepseekV4Attention):
+                 # getattr for tests that bypass __init__ via object.__new__.
+                 max_image_tokens=getattr(self, "max_image_tokens", 0),
+             )
+-            if swa_only:
+-                swa_metadata.flashinfer_sparse_index_cache["swa_only"] = (
++            if cache_key is not None:
++                swa_metadata.flashinfer_sparse_index_cache[cache_key] = (
+                     sparse_indices,
+                     sparse_topk_lens,
+                 )
+diff --git a/vllm/v1/attention/backends/mla/sparse_swa.py b/vllm/v1/attention/backends/mla/sparse_swa.py
+index 02e6336a38..d4b5f473f8 100644
+--- a/vllm/v1/attention/backends/mla/sparse_swa.py
++++ b/vllm/v1/attention/backends/mla/sparse_swa.py
+@@ -221,9 +221,9 @@ class DeepseekSparseSWAMetadata:
+     tile_sched_c128a: "FlashMLASchedMeta | None" = None
+     tile_sched_c1a: "FlashMLASchedMeta | None" = None
+     tile_sched_c2a: "FlashMLASchedMeta | None" = None
+-    flashinfer_sparse_index_cache: dict[str, tuple[torch.Tensor, torch.Tensor]] = field(
+-        default_factory=dict
+-    )
++    flashinfer_sparse_index_cache: dict[
++        str | tuple[int, ...], tuple[torch.Tensor, torch.Tensor]
++    ] = field(default_factory=dict)
+ 
+     def get_prefill_chunk_plan(
+         self,

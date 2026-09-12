@@ -1,0 +1,5222 @@
+[
+  {
+    "name": "model.layers.0.attn.fused_wqa_wkv",
+    "group": 1,
+    "m": 1,
+    "seed": 0,
+    "rmse": 1.2027692264382495e-07,
+    "max_abs": 7.62939453125e-06,
+    "finite": true
+  },
+  {
+    "name": "model.layers.0.attn.fused_wqa_wkv",
+    "group": 1,
+    "m": 1,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.0.attn.wo_b",
+    "group": 4,
+    "m": 1,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.0.attn.wo_b",
+    "group": 4,
+    "m": 1,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.0.attn.wo_b",
+    "group": 4,
+    "m": 2,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.0.attn.wo_b",
+    "group": 4,
+    "m": 2,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.1.attn.fused_wqa_wkv",
+    "group": 1,
+    "m": 1,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.1.attn.fused_wqa_wkv",
+    "group": 1,
+    "m": 1,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.1.attn.wo_b",
+    "group": 4,
+    "m": 1,
+    "seed": 0,
+    "rmse": 1.0228127393929753e-05,
+    "max_abs": 0.00048828125,
+    "finite": true
+  },
+  {
+    "name": "model.layers.1.attn.wo_b",
+    "group": 4,
+    "m": 1,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.1.attn.wo_b",
+    "group": 4,
+    "m": 2,
+    "seed": 0,
+    "rmse": 7.282017577381339e-06,
+    "max_abs": 0.00048828125,
+    "finite": true
+  },
+  {
+    "name": "model.layers.1.attn.wo_b",
+    "group": 4,
+    "m": 2,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.2.attn.fused_wqa_wkv",
+    "group": 1,
+    "m": 1,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.2.attn.fused_wqa_wkv",
+    "group": 1,
+    "m": 1,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.2.attn.wo_b",
+    "group": 4,
+    "m": 1,
+    "seed": 0,
+    "rmse": 3.9158411624384826e-08,
+    "max_abs": 1.9073486328125e-06,
+    "finite": true
+  },
+  {
+    "name": "model.layers.2.attn.wo_b",
+    "group": 4,
+    "m": 1,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.2.attn.wo_b",
+    "group": 4,
+    "m": 2,
+    "seed": 0,
+    "rmse": 2.788809894127553e-08,
+    "max_abs": 1.9073486328125e-06,
+    "finite": true
+  },
+  {
+    "name": "model.layers.2.attn.wo_b",
+    "group": 4,
+    "m": 2,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.2.attn.indexer.weights_proj",
+    "group": 11,
+    "m": 1,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.2.attn.indexer.weights_proj",
+    "group": 11,
+    "m": 1,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.2.attn.indexer.weights_proj",
+    "group": 11,
+    "m": 2,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.2.attn.indexer.weights_proj",
+    "group": 11,
+    "m": 2,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.2.attn.indexer.weights_proj",
+    "group": 11,
+    "m": 4,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.2.attn.indexer.weights_proj",
+    "group": 11,
+    "m": 4,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.2.attn.indexer.wk",
+    "group": 12,
+    "m": 1,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.2.attn.indexer.wk",
+    "group": 12,
+    "m": 1,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.2.attn.indexer.wk",
+    "group": 12,
+    "m": 2,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.2.attn.indexer.wk",
+    "group": 12,
+    "m": 2,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.2.attn.indexer.wk",
+    "group": 12,
+    "m": 4,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.2.attn.indexer.wk",
+    "group": 12,
+    "m": 4,
+    "seed": 1,
+    "rmse": 0.0002731645363382995,
+    "max_abs": 0.00390625,
+    "finite": true
+  },
+  {
+    "name": "model.layers.2.attn.compressor.fused_wkv_wgate",
+    "group": 13,
+    "m": 1,
+    "seed": 0,
+    "rmse": 1.7388994137945701e-06,
+    "max_abs": 1.049041748046875e-05,
+    "finite": true
+  },
+  {
+    "name": "model.layers.2.attn.compressor.fused_wkv_wgate",
+    "group": 13,
+    "m": 1,
+    "seed": 1,
+    "rmse": 1.8253921325595002e-06,
+    "max_abs": 1.239776611328125e-05,
+    "finite": true
+  },
+  {
+    "name": "model.layers.2.attn.compressor.fused_wkv_wgate",
+    "group": 13,
+    "m": 2,
+    "seed": 0,
+    "rmse": 1.755976768436085e-06,
+    "max_abs": 1.430511474609375e-05,
+    "finite": true
+  },
+  {
+    "name": "model.layers.2.attn.compressor.fused_wkv_wgate",
+    "group": 13,
+    "m": 2,
+    "seed": 1,
+    "rmse": 1.7873936712931027e-06,
+    "max_abs": 1.1920928955078125e-05,
+    "finite": true
+  },
+  {
+    "name": "model.layers.2.attn.compressor.fused_wkv_wgate",
+    "group": 13,
+    "m": 4,
+    "seed": 0,
+    "rmse": 1.74603883351665e-06,
+    "max_abs": 1.430511474609375e-05,
+    "finite": true
+  },
+  {
+    "name": "model.layers.2.attn.compressor.fused_wkv_wgate",
+    "group": 13,
+    "m": 4,
+    "seed": 1,
+    "rmse": 1.8002405113293207e-06,
+    "max_abs": 1.2874603271484375e-05,
+    "finite": true
+  },
+  {
+    "name": "model.layers.3.attn.fused_wqa_wkv",
+    "group": 1,
+    "m": 1,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.3.attn.fused_wqa_wkv",
+    "group": 1,
+    "m": 1,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.3.attn.wo_b",
+    "group": 4,
+    "m": 1,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.3.attn.wo_b",
+    "group": 4,
+    "m": 1,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.3.attn.wo_b",
+    "group": 4,
+    "m": 2,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.3.attn.wo_b",
+    "group": 4,
+    "m": 2,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.4.attn.fused_wqa_wkv",
+    "group": 1,
+    "m": 1,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.4.attn.fused_wqa_wkv",
+    "group": 1,
+    "m": 1,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.4.attn.wo_b",
+    "group": 4,
+    "m": 1,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.4.attn.wo_b",
+    "group": 4,
+    "m": 1,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.4.attn.wo_b",
+    "group": 4,
+    "m": 2,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.4.attn.wo_b",
+    "group": 4,
+    "m": 2,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.5.attn.fused_wqa_wkv",
+    "group": 1,
+    "m": 1,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.5.attn.fused_wqa_wkv",
+    "group": 1,
+    "m": 1,
+    "seed": 1,
+    "rmse": 7.107109468051931e-06,
+    "max_abs": 0.00048828125,
+    "finite": true
+  },
+  {
+    "name": "model.layers.5.attn.wo_b",
+    "group": 4,
+    "m": 1,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.5.attn.wo_b",
+    "group": 4,
+    "m": 1,
+    "seed": 1,
+    "rmse": 1.1702244728795108e-09,
+    "max_abs": 5.960464477539063e-08,
+    "finite": true
+  },
+  {
+    "name": "model.layers.5.attn.wo_b",
+    "group": 4,
+    "m": 2,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.5.attn.wo_b",
+    "group": 4,
+    "m": 2,
+    "seed": 1,
+    "rmse": 8.267867501743353e-10,
+    "max_abs": 5.960464477539063e-08,
+    "finite": true
+  },
+  {
+    "name": "model.layers.6.attn.fused_wqa_wkv",
+    "group": 1,
+    "m": 1,
+    "seed": 0,
+    "rmse": 1.4771888345421758e-05,
+    "max_abs": 0.0009765625,
+    "finite": true
+  },
+  {
+    "name": "model.layers.6.attn.fused_wqa_wkv",
+    "group": 1,
+    "m": 1,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.6.attn.wo_b",
+    "group": 4,
+    "m": 1,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.6.attn.wo_b",
+    "group": 4,
+    "m": 1,
+    "seed": 1,
+    "rmse": 6.751370018598379e-10,
+    "max_abs": 2.9802322387695312e-08,
+    "finite": true
+  },
+  {
+    "name": "model.layers.6.attn.wo_b",
+    "group": 4,
+    "m": 2,
+    "seed": 0,
+    "rmse": 1.6115141988848336e-05,
+    "max_abs": 0.0009765625,
+    "finite": true
+  },
+  {
+    "name": "model.layers.6.attn.wo_b",
+    "group": 4,
+    "m": 2,
+    "seed": 1,
+    "rmse": 4.740081105403249e-10,
+    "max_abs": 2.9802322387695312e-08,
+    "finite": true
+  },
+  {
+    "name": "model.layers.7.attn.fused_wqa_wkv",
+    "group": 1,
+    "m": 1,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.7.attn.fused_wqa_wkv",
+    "group": 1,
+    "m": 1,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.7.attn.wo_b",
+    "group": 4,
+    "m": 1,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.7.attn.wo_b",
+    "group": 4,
+    "m": 1,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.7.attn.wo_b",
+    "group": 4,
+    "m": 2,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.7.attn.wo_b",
+    "group": 4,
+    "m": 2,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.8.attn.fused_wqa_wkv",
+    "group": 1,
+    "m": 1,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.8.attn.fused_wqa_wkv",
+    "group": 1,
+    "m": 1,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.8.attn.wo_b",
+    "group": 4,
+    "m": 1,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.8.attn.wo_b",
+    "group": 4,
+    "m": 1,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.8.attn.wo_b",
+    "group": 4,
+    "m": 2,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.8.attn.wo_b",
+    "group": 4,
+    "m": 2,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.8.attn.indexer.weights_proj",
+    "group": 11,
+    "m": 1,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.8.attn.indexer.weights_proj",
+    "group": 11,
+    "m": 1,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.8.attn.indexer.weights_proj",
+    "group": 11,
+    "m": 2,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.8.attn.indexer.weights_proj",
+    "group": 11,
+    "m": 2,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.8.attn.indexer.weights_proj",
+    "group": 11,
+    "m": 4,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.8.attn.indexer.weights_proj",
+    "group": 11,
+    "m": 4,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.8.attn.indexer.wk",
+    "group": 12,
+    "m": 1,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.8.attn.indexer.wk",
+    "group": 12,
+    "m": 1,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.8.attn.indexer.wk",
+    "group": 12,
+    "m": 2,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.8.attn.indexer.wk",
+    "group": 12,
+    "m": 2,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.8.attn.indexer.wk",
+    "group": 12,
+    "m": 4,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.8.attn.indexer.wk",
+    "group": 12,
+    "m": 4,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.8.attn.compressor.fused_wkv_wgate",
+    "group": 13,
+    "m": 1,
+    "seed": 0,
+    "rmse": 1.7235996665476705e-06,
+    "max_abs": 1.239776611328125e-05,
+    "finite": true
+  },
+  {
+    "name": "model.layers.8.attn.compressor.fused_wkv_wgate",
+    "group": 13,
+    "m": 1,
+    "seed": 1,
+    "rmse": 1.777802708602394e-06,
+    "max_abs": 1.430511474609375e-05,
+    "finite": true
+  },
+  {
+    "name": "model.layers.8.attn.compressor.fused_wkv_wgate",
+    "group": 13,
+    "m": 2,
+    "seed": 0,
+    "rmse": 1.736939680085925e-06,
+    "max_abs": 1.239776611328125e-05,
+    "finite": true
+  },
+  {
+    "name": "model.layers.8.attn.compressor.fused_wkv_wgate",
+    "group": 13,
+    "m": 2,
+    "seed": 1,
+    "rmse": 1.732146870381257e-06,
+    "max_abs": 1.4781951904296875e-05,
+    "finite": true
+  },
+  {
+    "name": "model.layers.8.attn.compressor.fused_wkv_wgate",
+    "group": 13,
+    "m": 4,
+    "seed": 0,
+    "rmse": 1.6289933455482242e-06,
+    "max_abs": 1.6689300537109375e-05,
+    "finite": true
+  },
+  {
+    "name": "model.layers.8.attn.compressor.fused_wkv_wgate",
+    "group": 13,
+    "m": 4,
+    "seed": 1,
+    "rmse": 1.7183424461109098e-06,
+    "max_abs": 1.4781951904296875e-05,
+    "finite": true
+  },
+  {
+    "name": "model.layers.9.attn.fused_wqa_wkv",
+    "group": 1,
+    "m": 1,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.9.attn.fused_wqa_wkv",
+    "group": 1,
+    "m": 1,
+    "seed": 1,
+    "rmse": 0.00021550698147621006,
+    "max_abs": 0.015625,
+    "finite": true
+  },
+  {
+    "name": "model.layers.9.attn.wo_b",
+    "group": 4,
+    "m": 1,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.9.attn.wo_b",
+    "group": 4,
+    "m": 1,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.9.attn.wo_b",
+    "group": 4,
+    "m": 2,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.9.attn.wo_b",
+    "group": 4,
+    "m": 2,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.10.attn.fused_wqa_wkv",
+    "group": 1,
+    "m": 1,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.10.attn.fused_wqa_wkv",
+    "group": 1,
+    "m": 1,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.10.attn.wo_b",
+    "group": 4,
+    "m": 1,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.10.attn.wo_b",
+    "group": 4,
+    "m": 1,
+    "seed": 1,
+    "rmse": 7.487789588367377e-08,
+    "max_abs": 3.814697265625e-06,
+    "finite": true
+  },
+  {
+    "name": "model.layers.10.attn.wo_b",
+    "group": 4,
+    "m": 2,
+    "seed": 0,
+    "rmse": 2.1576040865056711e-07,
+    "max_abs": 1.52587890625e-05,
+    "finite": true
+  },
+  {
+    "name": "model.layers.10.attn.wo_b",
+    "group": 4,
+    "m": 2,
+    "seed": 1,
+    "rmse": 5.232362809692859e-08,
+    "max_abs": 3.814697265625e-06,
+    "finite": true
+  },
+  {
+    "name": "model.layers.11.attn.fused_wqa_wkv",
+    "group": 1,
+    "m": 1,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.11.attn.fused_wqa_wkv",
+    "group": 1,
+    "m": 1,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.11.attn.wo_b",
+    "group": 4,
+    "m": 1,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.11.attn.wo_b",
+    "group": 4,
+    "m": 1,
+    "seed": 1,
+    "rmse": 1.3845851754012983e-07,
+    "max_abs": 7.62939453125e-06,
+    "finite": true
+  },
+  {
+    "name": "model.layers.11.attn.wo_b",
+    "group": 4,
+    "m": 2,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.11.attn.wo_b",
+    "group": 4,
+    "m": 2,
+    "seed": 1,
+    "rmse": 9.738946005199978e-08,
+    "max_abs": 7.62939453125e-06,
+    "finite": true
+  },
+  {
+    "name": "model.layers.12.attn.fused_wqa_wkv",
+    "group": 1,
+    "m": 1,
+    "seed": 0,
+    "rmse": 1.3821942701497392e-08,
+    "max_abs": 9.5367431640625e-07,
+    "finite": true
+  },
+  {
+    "name": "model.layers.12.attn.fused_wqa_wkv",
+    "group": 1,
+    "m": 1,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.12.attn.wo_b",
+    "group": 4,
+    "m": 1,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.12.attn.wo_b",
+    "group": 4,
+    "m": 1,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.12.attn.wo_b",
+    "group": 4,
+    "m": 2,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.12.attn.wo_b",
+    "group": 4,
+    "m": 2,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.13.attn.fused_wqa_wkv",
+    "group": 1,
+    "m": 1,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.13.attn.fused_wqa_wkv",
+    "group": 1,
+    "m": 1,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.13.attn.wo_b",
+    "group": 4,
+    "m": 1,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.13.attn.wo_b",
+    "group": 4,
+    "m": 1,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.13.attn.wo_b",
+    "group": 4,
+    "m": 2,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.13.attn.wo_b",
+    "group": 4,
+    "m": 2,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.14.attn.fused_wqa_wkv",
+    "group": 1,
+    "m": 1,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.14.attn.fused_wqa_wkv",
+    "group": 1,
+    "m": 1,
+    "seed": 1,
+    "rmse": 4.0531517697672825e-07,
+    "max_abs": 3.0517578125e-05,
+    "finite": true
+  },
+  {
+    "name": "model.layers.14.attn.wo_b",
+    "group": 4,
+    "m": 1,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.14.attn.wo_b",
+    "group": 4,
+    "m": 1,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.14.attn.wo_b",
+    "group": 4,
+    "m": 2,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.14.attn.wo_b",
+    "group": 4,
+    "m": 2,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.14.attn.indexer.weights_proj",
+    "group": 11,
+    "m": 1,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.14.attn.indexer.weights_proj",
+    "group": 11,
+    "m": 1,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.14.attn.indexer.weights_proj",
+    "group": 11,
+    "m": 2,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.14.attn.indexer.weights_proj",
+    "group": 11,
+    "m": 2,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.14.attn.indexer.weights_proj",
+    "group": 11,
+    "m": 4,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.14.attn.indexer.weights_proj",
+    "group": 11,
+    "m": 4,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.14.attn.indexer.wk",
+    "group": 12,
+    "m": 1,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.14.attn.indexer.wk",
+    "group": 12,
+    "m": 1,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.14.attn.indexer.wk",
+    "group": 12,
+    "m": 2,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.14.attn.indexer.wk",
+    "group": 12,
+    "m": 2,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.14.attn.indexer.wk",
+    "group": 12,
+    "m": 4,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.14.attn.indexer.wk",
+    "group": 12,
+    "m": 4,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.14.attn.compressor.fused_wkv_wgate",
+    "group": 13,
+    "m": 1,
+    "seed": 0,
+    "rmse": 2.089931058435468e-06,
+    "max_abs": 2.193450927734375e-05,
+    "finite": true
+  },
+  {
+    "name": "model.layers.14.attn.compressor.fused_wkv_wgate",
+    "group": 13,
+    "m": 1,
+    "seed": 1,
+    "rmse": 1.8070402347802883e-06,
+    "max_abs": 2.47955322265625e-05,
+    "finite": true
+  },
+  {
+    "name": "model.layers.14.attn.compressor.fused_wkv_wgate",
+    "group": 13,
+    "m": 2,
+    "seed": 0,
+    "rmse": 1.987236601053155e-06,
+    "max_abs": 2.288818359375e-05,
+    "finite": true
+  },
+  {
+    "name": "model.layers.14.attn.compressor.fused_wkv_wgate",
+    "group": 13,
+    "m": 2,
+    "seed": 1,
+    "rmse": 1.8141350892619812e-06,
+    "max_abs": 2.574920654296875e-05,
+    "finite": true
+  },
+  {
+    "name": "model.layers.14.attn.compressor.fused_wkv_wgate",
+    "group": 13,
+    "m": 4,
+    "seed": 0,
+    "rmse": 1.9666745174617972e-06,
+    "max_abs": 2.288818359375e-05,
+    "finite": true
+  },
+  {
+    "name": "model.layers.14.attn.compressor.fused_wkv_wgate",
+    "group": 13,
+    "m": 4,
+    "seed": 1,
+    "rmse": 1.825557205847872e-06,
+    "max_abs": 2.574920654296875e-05,
+    "finite": true
+  },
+  {
+    "name": "model.layers.15.attn.fused_wqa_wkv",
+    "group": 1,
+    "m": 1,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.15.attn.fused_wqa_wkv",
+    "group": 1,
+    "m": 1,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.15.attn.wo_b",
+    "group": 4,
+    "m": 1,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.15.attn.wo_b",
+    "group": 4,
+    "m": 1,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.15.attn.wo_b",
+    "group": 4,
+    "m": 2,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.15.attn.wo_b",
+    "group": 4,
+    "m": 2,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.16.attn.fused_wqa_wkv",
+    "group": 1,
+    "m": 1,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.16.attn.fused_wqa_wkv",
+    "group": 1,
+    "m": 1,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.16.attn.wo_b",
+    "group": 4,
+    "m": 1,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.16.attn.wo_b",
+    "group": 4,
+    "m": 1,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.16.attn.wo_b",
+    "group": 4,
+    "m": 2,
+    "seed": 0,
+    "rmse": 8.346457889274461e-07,
+    "max_abs": 6.103515625e-05,
+    "finite": true
+  },
+  {
+    "name": "model.layers.16.attn.wo_b",
+    "group": 4,
+    "m": 2,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.17.attn.fused_wqa_wkv",
+    "group": 1,
+    "m": 1,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.17.attn.fused_wqa_wkv",
+    "group": 1,
+    "m": 1,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.17.attn.wo_b",
+    "group": 4,
+    "m": 1,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.17.attn.wo_b",
+    "group": 4,
+    "m": 1,
+    "seed": 1,
+    "rmse": 2.0613437623495656e-09,
+    "max_abs": 1.1920928955078125e-07,
+    "finite": true
+  },
+  {
+    "name": "model.layers.17.attn.wo_b",
+    "group": 4,
+    "m": 2,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.17.attn.wo_b",
+    "group": 4,
+    "m": 2,
+    "seed": 1,
+    "rmse": 1.4677983273259088e-09,
+    "max_abs": 1.1920928955078125e-07,
+    "finite": true
+  },
+  {
+    "name": "model.layers.18.attn.fused_wqa_wkv",
+    "group": 1,
+    "m": 1,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.18.attn.fused_wqa_wkv",
+    "group": 1,
+    "m": 1,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.18.attn.wo_b",
+    "group": 4,
+    "m": 1,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.18.attn.wo_b",
+    "group": 4,
+    "m": 1,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.18.attn.wo_b",
+    "group": 4,
+    "m": 2,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.18.attn.wo_b",
+    "group": 4,
+    "m": 2,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.19.attn.fused_wqa_wkv",
+    "group": 1,
+    "m": 1,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.19.attn.fused_wqa_wkv",
+    "group": 1,
+    "m": 1,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.19.attn.wo_b",
+    "group": 4,
+    "m": 1,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.19.attn.wo_b",
+    "group": 4,
+    "m": 1,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.19.attn.wo_b",
+    "group": 4,
+    "m": 2,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.19.attn.wo_b",
+    "group": 4,
+    "m": 2,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.20.attn.fused_wqa_wkv",
+    "group": 1,
+    "m": 1,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.20.attn.fused_wqa_wkv",
+    "group": 1,
+    "m": 1,
+    "seed": 1,
+    "rmse": 2.5862073016469367e-05,
+    "max_abs": 0.001953125,
+    "finite": true
+  },
+  {
+    "name": "model.layers.20.attn.wo_b",
+    "group": 4,
+    "m": 1,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.20.attn.wo_b",
+    "group": 4,
+    "m": 1,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.20.attn.wo_b",
+    "group": 4,
+    "m": 2,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.20.attn.wo_b",
+    "group": 4,
+    "m": 2,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.20.attn.indexer.weights_proj",
+    "group": 11,
+    "m": 1,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.20.attn.indexer.weights_proj",
+    "group": 11,
+    "m": 1,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.20.attn.indexer.weights_proj",
+    "group": 11,
+    "m": 2,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.20.attn.indexer.weights_proj",
+    "group": 11,
+    "m": 2,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.20.attn.indexer.weights_proj",
+    "group": 11,
+    "m": 4,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.20.attn.indexer.weights_proj",
+    "group": 11,
+    "m": 4,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.20.attn.indexer.wk",
+    "group": 12,
+    "m": 1,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.20.attn.indexer.wk",
+    "group": 12,
+    "m": 1,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.20.attn.indexer.wk",
+    "group": 12,
+    "m": 2,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.20.attn.indexer.wk",
+    "group": 12,
+    "m": 2,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.20.attn.indexer.wk",
+    "group": 12,
+    "m": 4,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.20.attn.indexer.wk",
+    "group": 12,
+    "m": 4,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.20.attn.compressor.fused_wkv_wgate",
+    "group": 15,
+    "m": 1,
+    "seed": 0,
+    "rmse": 1.7979132280743215e-06,
+    "max_abs": 1.1920928955078125e-05,
+    "finite": true
+  },
+  {
+    "name": "model.layers.20.attn.compressor.fused_wkv_wgate",
+    "group": 15,
+    "m": 1,
+    "seed": 1,
+    "rmse": 1.828638460210641e-06,
+    "max_abs": 1.52587890625e-05,
+    "finite": true
+  },
+  {
+    "name": "model.layers.20.attn.compressor.fused_wkv_wgate",
+    "group": 15,
+    "m": 2,
+    "seed": 0,
+    "rmse": 1.7990106471188483e-06,
+    "max_abs": 1.2874603271484375e-05,
+    "finite": true
+  },
+  {
+    "name": "model.layers.20.attn.compressor.fused_wkv_wgate",
+    "group": 15,
+    "m": 2,
+    "seed": 1,
+    "rmse": 1.7931417914951453e-06,
+    "max_abs": 1.52587890625e-05,
+    "finite": true
+  },
+  {
+    "name": "model.layers.20.attn.compressor.fused_wkv_wgate",
+    "group": 15,
+    "m": 4,
+    "seed": 0,
+    "rmse": 1.753686547090183e-06,
+    "max_abs": 1.3828277587890625e-05,
+    "finite": true
+  },
+  {
+    "name": "model.layers.20.attn.compressor.fused_wkv_wgate",
+    "group": 15,
+    "m": 4,
+    "seed": 1,
+    "rmse": 1.7329982711089542e-06,
+    "max_abs": 1.52587890625e-05,
+    "finite": true
+  },
+  {
+    "name": "model.layers.21.attn.fused_wqa_wkv",
+    "group": 1,
+    "m": 1,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.21.attn.fused_wqa_wkv",
+    "group": 1,
+    "m": 1,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.21.attn.wo_b",
+    "group": 4,
+    "m": 1,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.21.attn.wo_b",
+    "group": 4,
+    "m": 1,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.21.attn.wo_b",
+    "group": 4,
+    "m": 2,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.21.attn.wo_b",
+    "group": 4,
+    "m": 2,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.22.attn.fused_wqa_wkv",
+    "group": 1,
+    "m": 1,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.22.attn.fused_wqa_wkv",
+    "group": 1,
+    "m": 1,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.22.attn.wo_b",
+    "group": 4,
+    "m": 1,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.22.attn.wo_b",
+    "group": 4,
+    "m": 1,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.22.attn.wo_b",
+    "group": 4,
+    "m": 2,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.22.attn.wo_b",
+    "group": 4,
+    "m": 2,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.23.attn.fused_wqa_wkv",
+    "group": 1,
+    "m": 1,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.23.attn.fused_wqa_wkv",
+    "group": 1,
+    "m": 1,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.23.attn.wo_b",
+    "group": 4,
+    "m": 1,
+    "seed": 0,
+    "rmse": 3.241472157355929e-08,
+    "max_abs": 1.9073486328125e-06,
+    "finite": true
+  },
+  {
+    "name": "model.layers.23.attn.wo_b",
+    "group": 4,
+    "m": 1,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.23.attn.wo_b",
+    "group": 4,
+    "m": 2,
+    "seed": 0,
+    "rmse": 2.3035605423160632e-08,
+    "max_abs": 1.9073486328125e-06,
+    "finite": true
+  },
+  {
+    "name": "model.layers.23.attn.wo_b",
+    "group": 4,
+    "m": 2,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.24.attn.fused_wqa_wkv",
+    "group": 1,
+    "m": 1,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.24.attn.fused_wqa_wkv",
+    "group": 1,
+    "m": 1,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.24.attn.wo_b",
+    "group": 4,
+    "m": 1,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.24.attn.wo_b",
+    "group": 4,
+    "m": 1,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.24.attn.wo_b",
+    "group": 4,
+    "m": 2,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.24.attn.wo_b",
+    "group": 4,
+    "m": 2,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.24.attn.indexer.weights_proj",
+    "group": 11,
+    "m": 1,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.24.attn.indexer.weights_proj",
+    "group": 11,
+    "m": 1,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.24.attn.indexer.weights_proj",
+    "group": 11,
+    "m": 2,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.24.attn.indexer.weights_proj",
+    "group": 11,
+    "m": 2,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.24.attn.indexer.weights_proj",
+    "group": 11,
+    "m": 4,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.24.attn.indexer.weights_proj",
+    "group": 11,
+    "m": 4,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.25.attn.fused_wqa_wkv",
+    "group": 1,
+    "m": 1,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.25.attn.fused_wqa_wkv",
+    "group": 1,
+    "m": 1,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.25.attn.wo_b",
+    "group": 4,
+    "m": 1,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.25.attn.wo_b",
+    "group": 4,
+    "m": 1,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.25.attn.wo_b",
+    "group": 4,
+    "m": 2,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.25.attn.wo_b",
+    "group": 4,
+    "m": 2,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.26.attn.fused_wqa_wkv",
+    "group": 1,
+    "m": 1,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.26.attn.fused_wqa_wkv",
+    "group": 1,
+    "m": 1,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.26.attn.wo_b",
+    "group": 4,
+    "m": 1,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.26.attn.wo_b",
+    "group": 4,
+    "m": 1,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.26.attn.wo_b",
+    "group": 4,
+    "m": 2,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.26.attn.wo_b",
+    "group": 4,
+    "m": 2,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.27.attn.fused_wqa_wkv",
+    "group": 1,
+    "m": 1,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.27.attn.fused_wqa_wkv",
+    "group": 1,
+    "m": 1,
+    "seed": 1,
+    "rmse": 5.726861490984447e-05,
+    "max_abs": 0.00390625,
+    "finite": true
+  },
+  {
+    "name": "model.layers.27.attn.wo_b",
+    "group": 4,
+    "m": 1,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.27.attn.wo_b",
+    "group": 4,
+    "m": 1,
+    "seed": 1,
+    "rmse": 2.4432342815572383e-09,
+    "max_abs": 1.1920928955078125e-07,
+    "finite": true
+  },
+  {
+    "name": "model.layers.27.attn.wo_b",
+    "group": 4,
+    "m": 2,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.27.attn.wo_b",
+    "group": 4,
+    "m": 2,
+    "seed": 1,
+    "rmse": 1.712851971369389e-09,
+    "max_abs": 1.1920928955078125e-07,
+    "finite": true
+  },
+  {
+    "name": "model.layers.28.attn.fused_wqa_wkv",
+    "group": 1,
+    "m": 1,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.28.attn.fused_wqa_wkv",
+    "group": 1,
+    "m": 1,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.28.attn.wo_b",
+    "group": 4,
+    "m": 1,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.28.attn.wo_b",
+    "group": 4,
+    "m": 1,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.28.attn.wo_b",
+    "group": 4,
+    "m": 2,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.28.attn.wo_b",
+    "group": 4,
+    "m": 2,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.28.attn.indexer.weights_proj",
+    "group": 11,
+    "m": 1,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.28.attn.indexer.weights_proj",
+    "group": 11,
+    "m": 1,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.28.attn.indexer.weights_proj",
+    "group": 11,
+    "m": 2,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.28.attn.indexer.weights_proj",
+    "group": 11,
+    "m": 2,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.28.attn.indexer.weights_proj",
+    "group": 11,
+    "m": 4,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.28.attn.indexer.weights_proj",
+    "group": 11,
+    "m": 4,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.29.attn.fused_wqa_wkv",
+    "group": 1,
+    "m": 1,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.29.attn.fused_wqa_wkv",
+    "group": 1,
+    "m": 1,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.29.attn.wo_b",
+    "group": 4,
+    "m": 1,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.29.attn.wo_b",
+    "group": 4,
+    "m": 1,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.29.attn.wo_b",
+    "group": 4,
+    "m": 2,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.29.attn.wo_b",
+    "group": 4,
+    "m": 2,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.30.attn.fused_wqa_wkv",
+    "group": 1,
+    "m": 1,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.30.attn.fused_wqa_wkv",
+    "group": 1,
+    "m": 1,
+    "seed": 1,
+    "rmse": 6.562935595866293e-06,
+    "max_abs": 0.00048828125,
+    "finite": true
+  },
+  {
+    "name": "model.layers.30.attn.wo_b",
+    "group": 4,
+    "m": 1,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.30.attn.wo_b",
+    "group": 4,
+    "m": 1,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.30.attn.wo_b",
+    "group": 4,
+    "m": 2,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.30.attn.wo_b",
+    "group": 4,
+    "m": 2,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.31.attn.fused_wqa_wkv",
+    "group": 1,
+    "m": 1,
+    "seed": 0,
+    "rmse": 1.6250029100106644e-09,
+    "max_abs": 1.1920928955078125e-07,
+    "finite": true
+  },
+  {
+    "name": "model.layers.31.attn.fused_wqa_wkv",
+    "group": 1,
+    "m": 1,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.31.attn.wo_b",
+    "group": 4,
+    "m": 1,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.31.attn.wo_b",
+    "group": 4,
+    "m": 1,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.31.attn.wo_b",
+    "group": 4,
+    "m": 2,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.31.attn.wo_b",
+    "group": 4,
+    "m": 2,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.32.attn.fused_wqa_wkv",
+    "group": 1,
+    "m": 1,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.32.attn.fused_wqa_wkv",
+    "group": 1,
+    "m": 1,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.32.attn.wo_b",
+    "group": 4,
+    "m": 1,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.32.attn.wo_b",
+    "group": 4,
+    "m": 1,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.32.attn.wo_b",
+    "group": 4,
+    "m": 2,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.32.attn.wo_b",
+    "group": 4,
+    "m": 2,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.32.attn.indexer.weights_proj",
+    "group": 11,
+    "m": 1,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.32.attn.indexer.weights_proj",
+    "group": 11,
+    "m": 1,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.32.attn.indexer.weights_proj",
+    "group": 11,
+    "m": 2,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.32.attn.indexer.weights_proj",
+    "group": 11,
+    "m": 2,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.32.attn.indexer.weights_proj",
+    "group": 11,
+    "m": 4,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.32.attn.indexer.weights_proj",
+    "group": 11,
+    "m": 4,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.33.attn.fused_wqa_wkv",
+    "group": 1,
+    "m": 1,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.33.attn.fused_wqa_wkv",
+    "group": 1,
+    "m": 1,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.33.attn.wo_b",
+    "group": 4,
+    "m": 1,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.33.attn.wo_b",
+    "group": 4,
+    "m": 1,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.33.attn.wo_b",
+    "group": 4,
+    "m": 2,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.33.attn.wo_b",
+    "group": 4,
+    "m": 2,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.34.attn.fused_wqa_wkv",
+    "group": 1,
+    "m": 1,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.34.attn.fused_wqa_wkv",
+    "group": 1,
+    "m": 1,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.34.attn.wo_b",
+    "group": 4,
+    "m": 1,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.34.attn.wo_b",
+    "group": 4,
+    "m": 1,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.34.attn.wo_b",
+    "group": 4,
+    "m": 2,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.34.attn.wo_b",
+    "group": 4,
+    "m": 2,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.35.attn.fused_wqa_wkv",
+    "group": 1,
+    "m": 1,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.35.attn.fused_wqa_wkv",
+    "group": 1,
+    "m": 1,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.35.attn.wo_b",
+    "group": 4,
+    "m": 1,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.35.attn.wo_b",
+    "group": 4,
+    "m": 1,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.35.attn.wo_b",
+    "group": 4,
+    "m": 2,
+    "seed": 0,
+    "rmse": 5.074625005363487e-05,
+    "max_abs": 0.00390625,
+    "finite": true
+  },
+  {
+    "name": "model.layers.35.attn.wo_b",
+    "group": 4,
+    "m": 2,
+    "seed": 1,
+    "rmse": 6.020779437676538e-06,
+    "max_abs": 0.00048828125,
+    "finite": true
+  },
+  {
+    "name": "model.layers.36.attn.fused_wqa_wkv",
+    "group": 1,
+    "m": 1,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.36.attn.fused_wqa_wkv",
+    "group": 1,
+    "m": 1,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.36.attn.wo_b",
+    "group": 4,
+    "m": 1,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.36.attn.wo_b",
+    "group": 4,
+    "m": 1,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.36.attn.wo_b",
+    "group": 4,
+    "m": 2,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.36.attn.wo_b",
+    "group": 4,
+    "m": 2,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.36.attn.indexer.weights_proj",
+    "group": 11,
+    "m": 1,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.36.attn.indexer.weights_proj",
+    "group": 11,
+    "m": 1,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.36.attn.indexer.weights_proj",
+    "group": 11,
+    "m": 2,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.36.attn.indexer.weights_proj",
+    "group": 11,
+    "m": 2,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.36.attn.indexer.weights_proj",
+    "group": 11,
+    "m": 4,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.36.attn.indexer.weights_proj",
+    "group": 11,
+    "m": 4,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.37.attn.fused_wqa_wkv",
+    "group": 1,
+    "m": 1,
+    "seed": 0,
+    "rmse": 1.0216653123507058e-07,
+    "max_abs": 7.62939453125e-06,
+    "finite": true
+  },
+  {
+    "name": "model.layers.37.attn.fused_wqa_wkv",
+    "group": 1,
+    "m": 1,
+    "seed": 1,
+    "rmse": 6.36619024163565e-09,
+    "max_abs": 4.76837158203125e-07,
+    "finite": true
+  },
+  {
+    "name": "model.layers.37.attn.wo_b",
+    "group": 4,
+    "m": 1,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.37.attn.wo_b",
+    "group": 4,
+    "m": 1,
+    "seed": 1,
+    "rmse": 7.70440511388415e-09,
+    "max_abs": 4.76837158203125e-07,
+    "finite": true
+  },
+  {
+    "name": "model.layers.37.attn.wo_b",
+    "group": 4,
+    "m": 2,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.37.attn.wo_b",
+    "group": 4,
+    "m": 2,
+    "seed": 1,
+    "rmse": 5.4484794453912855e-09,
+    "max_abs": 4.76837158203125e-07,
+    "finite": true
+  },
+  {
+    "name": "model.layers.38.attn.fused_wqa_wkv",
+    "group": 1,
+    "m": 1,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.38.attn.fused_wqa_wkv",
+    "group": 1,
+    "m": 1,
+    "seed": 1,
+    "rmse": 1.0544050610405975e-07,
+    "max_abs": 7.62939453125e-06,
+    "finite": true
+  },
+  {
+    "name": "model.layers.38.attn.wo_b",
+    "group": 4,
+    "m": 1,
+    "seed": 0,
+    "rmse": 8.011358687554093e-09,
+    "max_abs": 4.76837158203125e-07,
+    "finite": true
+  },
+  {
+    "name": "model.layers.38.attn.wo_b",
+    "group": 4,
+    "m": 1,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.38.attn.wo_b",
+    "group": 4,
+    "m": 2,
+    "seed": 0,
+    "rmse": 5.701723537754333e-09,
+    "max_abs": 4.76837158203125e-07,
+    "finite": true
+  },
+  {
+    "name": "model.layers.38.attn.wo_b",
+    "group": 4,
+    "m": 2,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.39.attn.fused_wqa_wkv",
+    "group": 1,
+    "m": 1,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.39.attn.fused_wqa_wkv",
+    "group": 1,
+    "m": 1,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.39.attn.wo_b",
+    "group": 4,
+    "m": 1,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.39.attn.wo_b",
+    "group": 4,
+    "m": 1,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.39.attn.wo_b",
+    "group": 4,
+    "m": 2,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "model.layers.39.attn.wo_b",
+    "group": 4,
+    "m": 2,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "lm_head",
+    "group": 16,
+    "m": 1,
+    "seed": 0,
+    "rmse": 0.0002006416762014851,
+    "max_abs": 0.125,
+    "finite": true
+  },
+  {
+    "name": "lm_head",
+    "group": 16,
+    "m": 1,
+    "seed": 1,
+    "rmse": 0.00010354197002016008,
+    "max_abs": 0.0625,
+    "finite": true
+  },
+  {
+    "name": "lm_head",
+    "group": 16,
+    "m": 2,
+    "seed": 0,
+    "rmse": 0.00018099552835337818,
+    "max_abs": 0.125,
+    "finite": true
+  },
+  {
+    "name": "lm_head",
+    "group": 16,
+    "m": 2,
+    "seed": 1,
+    "rmse": 0.00018981331959366798,
+    "max_abs": 0.125,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.0.attn.wo_a",
+    "group": 3,
+    "m": 1,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.0.attn.wo_a",
+    "group": 3,
+    "m": 1,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.0.attn.wo_a",
+    "group": 3,
+    "m": 2,
+    "seed": 0,
+    "rmse": 3.522674596467823e-09,
+    "max_abs": 2.384185791015625e-07,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.0.attn.wo_a",
+    "group": 3,
+    "m": 2,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.0.attn.wo_a",
+    "group": 3,
+    "m": 4,
+    "seed": 0,
+    "rmse": 1.6039146544244431e-07,
+    "max_abs": 1.52587890625e-05,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.0.attn.wo_a",
+    "group": 3,
+    "m": 4,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.1.attn.wo_a",
+    "group": 3,
+    "m": 1,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.1.attn.wo_a",
+    "group": 3,
+    "m": 1,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.1.attn.wo_a",
+    "group": 3,
+    "m": 2,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.1.attn.wo_a",
+    "group": 3,
+    "m": 2,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.1.attn.wo_a",
+    "group": 3,
+    "m": 4,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.1.attn.wo_a",
+    "group": 3,
+    "m": 4,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.2.attn.wo_a",
+    "group": 3,
+    "m": 1,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.2.attn.wo_a",
+    "group": 3,
+    "m": 1,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.2.attn.wo_a",
+    "group": 3,
+    "m": 2,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.2.attn.wo_a",
+    "group": 3,
+    "m": 2,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.2.attn.wo_a",
+    "group": 3,
+    "m": 4,
+    "seed": 0,
+    "rmse": 9.222737240577317e-09,
+    "max_abs": 9.5367431640625e-07,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.2.attn.wo_a",
+    "group": 3,
+    "m": 4,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.3.attn.wo_a",
+    "group": 3,
+    "m": 1,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.3.attn.wo_a",
+    "group": 3,
+    "m": 1,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.3.attn.wo_a",
+    "group": 3,
+    "m": 2,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.3.attn.wo_a",
+    "group": 3,
+    "m": 2,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.3.attn.wo_a",
+    "group": 3,
+    "m": 4,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.3.attn.wo_a",
+    "group": 3,
+    "m": 4,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.4.attn.wo_a",
+    "group": 3,
+    "m": 1,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.4.attn.wo_a",
+    "group": 3,
+    "m": 1,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.4.attn.wo_a",
+    "group": 3,
+    "m": 2,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.4.attn.wo_a",
+    "group": 3,
+    "m": 2,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.4.attn.wo_a",
+    "group": 3,
+    "m": 4,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.4.attn.wo_a",
+    "group": 3,
+    "m": 4,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.5.attn.wo_a",
+    "group": 3,
+    "m": 1,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.5.attn.wo_a",
+    "group": 3,
+    "m": 1,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.5.attn.wo_a",
+    "group": 3,
+    "m": 2,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.5.attn.wo_a",
+    "group": 3,
+    "m": 2,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.5.attn.wo_a",
+    "group": 3,
+    "m": 4,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.5.attn.wo_a",
+    "group": 3,
+    "m": 4,
+    "seed": 1,
+    "rmse": 1.151110836872249e-06,
+    "max_abs": 0.0001220703125,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.6.attn.wo_a",
+    "group": 3,
+    "m": 1,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.6.attn.wo_a",
+    "group": 3,
+    "m": 1,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.6.attn.wo_a",
+    "group": 3,
+    "m": 2,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.6.attn.wo_a",
+    "group": 3,
+    "m": 2,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.6.attn.wo_a",
+    "group": 3,
+    "m": 4,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.6.attn.wo_a",
+    "group": 3,
+    "m": 4,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.7.attn.wo_a",
+    "group": 3,
+    "m": 1,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.7.attn.wo_a",
+    "group": 3,
+    "m": 1,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.7.attn.wo_a",
+    "group": 3,
+    "m": 2,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.7.attn.wo_a",
+    "group": 3,
+    "m": 2,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.7.attn.wo_a",
+    "group": 3,
+    "m": 4,
+    "seed": 0,
+    "rmse": 1.8271405721748124e-08,
+    "max_abs": 1.9073486328125e-06,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.7.attn.wo_a",
+    "group": 3,
+    "m": 4,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.8.attn.wo_a",
+    "group": 3,
+    "m": 1,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.8.attn.wo_a",
+    "group": 3,
+    "m": 1,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.8.attn.wo_a",
+    "group": 3,
+    "m": 2,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.8.attn.wo_a",
+    "group": 3,
+    "m": 2,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.8.attn.wo_a",
+    "group": 3,
+    "m": 4,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.8.attn.wo_a",
+    "group": 3,
+    "m": 4,
+    "seed": 1,
+    "rmse": 1.4461909358942648e-07,
+    "max_abs": 1.52587890625e-05,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.9.attn.wo_a",
+    "group": 3,
+    "m": 1,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.9.attn.wo_a",
+    "group": 3,
+    "m": 1,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.9.attn.wo_a",
+    "group": 3,
+    "m": 2,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.9.attn.wo_a",
+    "group": 3,
+    "m": 2,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.9.attn.wo_a",
+    "group": 3,
+    "m": 4,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.9.attn.wo_a",
+    "group": 3,
+    "m": 4,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.10.attn.wo_a",
+    "group": 3,
+    "m": 1,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.10.attn.wo_a",
+    "group": 3,
+    "m": 1,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.10.attn.wo_a",
+    "group": 3,
+    "m": 2,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.10.attn.wo_a",
+    "group": 3,
+    "m": 2,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.10.attn.wo_a",
+    "group": 3,
+    "m": 4,
+    "seed": 0,
+    "rmse": 7.509017763140946e-08,
+    "max_abs": 7.62939453125e-06,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.10.attn.wo_a",
+    "group": 3,
+    "m": 4,
+    "seed": 1,
+    "rmse": 2.908373062382452e-07,
+    "max_abs": 3.0517578125e-05,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.11.attn.wo_a",
+    "group": 3,
+    "m": 1,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.11.attn.wo_a",
+    "group": 3,
+    "m": 1,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.11.attn.wo_a",
+    "group": 3,
+    "m": 2,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.11.attn.wo_a",
+    "group": 3,
+    "m": 2,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.11.attn.wo_a",
+    "group": 3,
+    "m": 4,
+    "seed": 0,
+    "rmse": 1.0795034866006858e-09,
+    "max_abs": 1.1920928955078125e-07,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.11.attn.wo_a",
+    "group": 3,
+    "m": 4,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.12.attn.wo_a",
+    "group": 3,
+    "m": 1,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.12.attn.wo_a",
+    "group": 3,
+    "m": 1,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.12.attn.wo_a",
+    "group": 3,
+    "m": 2,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.12.attn.wo_a",
+    "group": 3,
+    "m": 2,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.12.attn.wo_a",
+    "group": 3,
+    "m": 4,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.12.attn.wo_a",
+    "group": 3,
+    "m": 4,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.13.attn.wo_a",
+    "group": 3,
+    "m": 1,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.13.attn.wo_a",
+    "group": 3,
+    "m": 1,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.13.attn.wo_a",
+    "group": 3,
+    "m": 2,
+    "seed": 0,
+    "rmse": 0.00010060544445877895,
+    "max_abs": 0.0078125,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.13.attn.wo_a",
+    "group": 3,
+    "m": 2,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.13.attn.wo_a",
+    "group": 3,
+    "m": 4,
+    "seed": 0,
+    "rmse": 7.339776493608952e-05,
+    "max_abs": 0.0078125,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.13.attn.wo_a",
+    "group": 3,
+    "m": 4,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.14.attn.wo_a",
+    "group": 3,
+    "m": 1,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.14.attn.wo_a",
+    "group": 3,
+    "m": 1,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.14.attn.wo_a",
+    "group": 3,
+    "m": 2,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.14.attn.wo_a",
+    "group": 3,
+    "m": 2,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.14.attn.wo_a",
+    "group": 3,
+    "m": 4,
+    "seed": 0,
+    "rmse": 7.127255940986288e-08,
+    "max_abs": 7.62939453125e-06,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.14.attn.wo_a",
+    "group": 3,
+    "m": 4,
+    "seed": 1,
+    "rmse": 1.7948910681298003e-05,
+    "max_abs": 0.001953125,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.15.attn.wo_a",
+    "group": 3,
+    "m": 1,
+    "seed": 0,
+    "rmse": 2.1886353351874277e-06,
+    "max_abs": 0.0001220703125,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.15.attn.wo_a",
+    "group": 3,
+    "m": 1,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.15.attn.wo_a",
+    "group": 3,
+    "m": 2,
+    "seed": 0,
+    "rmse": 1.5605844509991584e-06,
+    "max_abs": 0.0001220703125,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.15.attn.wo_a",
+    "group": 3,
+    "m": 2,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.15.attn.wo_a",
+    "group": 3,
+    "m": 4,
+    "seed": 0,
+    "rmse": 1.1182480648130877e-06,
+    "max_abs": 0.0001220703125,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.15.attn.wo_a",
+    "group": 3,
+    "m": 4,
+    "seed": 1,
+    "rmse": 3.2874651889613915e-09,
+    "max_abs": 3.5762786865234375e-07,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.16.attn.wo_a",
+    "group": 3,
+    "m": 1,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.16.attn.wo_a",
+    "group": 3,
+    "m": 1,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.16.attn.wo_a",
+    "group": 3,
+    "m": 2,
+    "seed": 0,
+    "rmse": 2.0437308023701917e-07,
+    "max_abs": 1.52587890625e-05,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.16.attn.wo_a",
+    "group": 3,
+    "m": 2,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.16.attn.wo_a",
+    "group": 3,
+    "m": 4,
+    "seed": 0,
+    "rmse": 1.4494652589291945e-07,
+    "max_abs": 1.52587890625e-05,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.16.attn.wo_a",
+    "group": 3,
+    "m": 4,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.17.attn.wo_a",
+    "group": 3,
+    "m": 1,
+    "seed": 0,
+    "rmse": 1.6839599936702143e-08,
+    "max_abs": 9.5367431640625e-07,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.17.attn.wo_a",
+    "group": 3,
+    "m": 1,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.17.attn.wo_a",
+    "group": 3,
+    "m": 2,
+    "seed": 0,
+    "rmse": 1.1882288930564755e-08,
+    "max_abs": 9.5367431640625e-07,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.17.attn.wo_a",
+    "group": 3,
+    "m": 2,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.17.attn.wo_a",
+    "group": 3,
+    "m": 4,
+    "seed": 0,
+    "rmse": 1.8738122165018467e-08,
+    "max_abs": 1.9073486328125e-06,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.17.attn.wo_a",
+    "group": 3,
+    "m": 4,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.18.attn.wo_a",
+    "group": 3,
+    "m": 1,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.18.attn.wo_a",
+    "group": 3,
+    "m": 1,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.18.attn.wo_a",
+    "group": 3,
+    "m": 2,
+    "seed": 0,
+    "rmse": 1.7760443427050632e-07,
+    "max_abs": 1.52587890625e-05,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.18.attn.wo_a",
+    "group": 3,
+    "m": 2,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.18.attn.wo_a",
+    "group": 3,
+    "m": 4,
+    "seed": 0,
+    "rmse": 1.2531862125797488e-07,
+    "max_abs": 1.52587890625e-05,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.18.attn.wo_a",
+    "group": 3,
+    "m": 4,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.19.attn.wo_a",
+    "group": 3,
+    "m": 1,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.19.attn.wo_a",
+    "group": 3,
+    "m": 1,
+    "seed": 1,
+    "rmse": 1.6710967054578418e-09,
+    "max_abs": 1.1920928955078125e-07,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.19.attn.wo_a",
+    "group": 3,
+    "m": 2,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.19.attn.wo_a",
+    "group": 3,
+    "m": 2,
+    "seed": 1,
+    "rmse": 1.1872391958434036e-09,
+    "max_abs": 1.1920928955078125e-07,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.19.attn.wo_a",
+    "group": 3,
+    "m": 4,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.19.attn.wo_a",
+    "group": 3,
+    "m": 4,
+    "seed": 1,
+    "rmse": 8.444473453828039e-10,
+    "max_abs": 1.1920928955078125e-07,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.20.attn.wo_a",
+    "group": 3,
+    "m": 1,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.20.attn.wo_a",
+    "group": 3,
+    "m": 1,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.20.attn.wo_a",
+    "group": 3,
+    "m": 2,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.20.attn.wo_a",
+    "group": 3,
+    "m": 2,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.20.attn.wo_a",
+    "group": 3,
+    "m": 4,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.20.attn.wo_a",
+    "group": 3,
+    "m": 4,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.21.attn.wo_a",
+    "group": 3,
+    "m": 1,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.21.attn.wo_a",
+    "group": 3,
+    "m": 1,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.21.attn.wo_a",
+    "group": 3,
+    "m": 2,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.21.attn.wo_a",
+    "group": 3,
+    "m": 2,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.21.attn.wo_a",
+    "group": 3,
+    "m": 4,
+    "seed": 0,
+    "rmse": 1.949952547875e-06,
+    "max_abs": 0.000244140625,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.21.attn.wo_a",
+    "group": 3,
+    "m": 4,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.22.attn.wo_a",
+    "group": 3,
+    "m": 1,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.22.attn.wo_a",
+    "group": 3,
+    "m": 1,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.22.attn.wo_a",
+    "group": 3,
+    "m": 2,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.22.attn.wo_a",
+    "group": 3,
+    "m": 2,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.22.attn.wo_a",
+    "group": 3,
+    "m": 4,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.22.attn.wo_a",
+    "group": 3,
+    "m": 4,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.23.attn.wo_a",
+    "group": 3,
+    "m": 1,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.23.attn.wo_a",
+    "group": 3,
+    "m": 1,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.23.attn.wo_a",
+    "group": 3,
+    "m": 2,
+    "seed": 0,
+    "rmse": 2.4296533673862086e-09,
+    "max_abs": 2.384185791015625e-07,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.23.attn.wo_a",
+    "group": 3,
+    "m": 2,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.23.attn.wo_a",
+    "group": 3,
+    "m": 4,
+    "seed": 0,
+    "rmse": 1.3807528453924078e-08,
+    "max_abs": 1.9073486328125e-06,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.23.attn.wo_a",
+    "group": 3,
+    "m": 4,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.24.attn.wo_a",
+    "group": 3,
+    "m": 1,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.24.attn.wo_a",
+    "group": 3,
+    "m": 1,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.24.attn.wo_a",
+    "group": 3,
+    "m": 2,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.24.attn.wo_a",
+    "group": 3,
+    "m": 2,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.24.attn.wo_a",
+    "group": 3,
+    "m": 4,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.24.attn.wo_a",
+    "group": 3,
+    "m": 4,
+    "seed": 1,
+    "rmse": 4.004824916137295e-09,
+    "max_abs": 4.76837158203125e-07,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.25.attn.wo_a",
+    "group": 3,
+    "m": 1,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.25.attn.wo_a",
+    "group": 3,
+    "m": 1,
+    "seed": 1,
+    "rmse": 4.153605015488893e-09,
+    "max_abs": 2.384185791015625e-07,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.25.attn.wo_a",
+    "group": 3,
+    "m": 2,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.25.attn.wo_a",
+    "group": 3,
+    "m": 2,
+    "seed": 1,
+    "rmse": 2.974342105943606e-09,
+    "max_abs": 2.384185791015625e-07,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.25.attn.wo_a",
+    "group": 3,
+    "m": 4,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.25.attn.wo_a",
+    "group": 3,
+    "m": 4,
+    "seed": 1,
+    "rmse": 2.11637685154642e-09,
+    "max_abs": 2.384185791015625e-07,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.26.attn.wo_a",
+    "group": 3,
+    "m": 1,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.26.attn.wo_a",
+    "group": 3,
+    "m": 1,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.26.attn.wo_a",
+    "group": 3,
+    "m": 2,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.26.attn.wo_a",
+    "group": 3,
+    "m": 2,
+    "seed": 1,
+    "rmse": 5.784077529824572e-06,
+    "max_abs": 0.00048828125,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.26.attn.wo_a",
+    "group": 3,
+    "m": 4,
+    "seed": 0,
+    "rmse": 1.6824904378154315e-05,
+    "max_abs": 0.001953125,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.26.attn.wo_a",
+    "group": 3,
+    "m": 4,
+    "seed": 1,
+    "rmse": 4.164154688623967e-06,
+    "max_abs": 0.00048828125,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.27.attn.wo_a",
+    "group": 3,
+    "m": 1,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.27.attn.wo_a",
+    "group": 3,
+    "m": 1,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.27.attn.wo_a",
+    "group": 3,
+    "m": 2,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.27.attn.wo_a",
+    "group": 3,
+    "m": 2,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.27.attn.wo_a",
+    "group": 3,
+    "m": 4,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.27.attn.wo_a",
+    "group": 3,
+    "m": 4,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.28.attn.wo_a",
+    "group": 3,
+    "m": 1,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.28.attn.wo_a",
+    "group": 3,
+    "m": 1,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.28.attn.wo_a",
+    "group": 3,
+    "m": 2,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.28.attn.wo_a",
+    "group": 3,
+    "m": 2,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.28.attn.wo_a",
+    "group": 3,
+    "m": 4,
+    "seed": 0,
+    "rmse": 1.0693904650693753e-09,
+    "max_abs": 1.1920928955078125e-07,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.28.attn.wo_a",
+    "group": 3,
+    "m": 4,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.29.attn.wo_a",
+    "group": 3,
+    "m": 1,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.29.attn.wo_a",
+    "group": 3,
+    "m": 1,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.29.attn.wo_a",
+    "group": 3,
+    "m": 2,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.29.attn.wo_a",
+    "group": 3,
+    "m": 2,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.29.attn.wo_a",
+    "group": 3,
+    "m": 4,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.29.attn.wo_a",
+    "group": 3,
+    "m": 4,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.30.attn.wo_a",
+    "group": 3,
+    "m": 1,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.30.attn.wo_a",
+    "group": 3,
+    "m": 1,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.30.attn.wo_a",
+    "group": 3,
+    "m": 2,
+    "seed": 0,
+    "rmse": 0.0001735677506076172,
+    "max_abs": 0.015625,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.30.attn.wo_a",
+    "group": 3,
+    "m": 2,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.30.attn.wo_a",
+    "group": 3,
+    "m": 4,
+    "seed": 0,
+    "rmse": 0.00012496161798480898,
+    "max_abs": 0.015625,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.30.attn.wo_a",
+    "group": 3,
+    "m": 4,
+    "seed": 1,
+    "rmse": 6.278704677242786e-05,
+    "max_abs": 0.0078125,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.31.attn.wo_a",
+    "group": 3,
+    "m": 1,
+    "seed": 0,
+    "rmse": 6.267931240699909e-08,
+    "max_abs": 3.814697265625e-06,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.31.attn.wo_a",
+    "group": 3,
+    "m": 1,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.31.attn.wo_a",
+    "group": 3,
+    "m": 2,
+    "seed": 0,
+    "rmse": 4.4920625441591255e-08,
+    "max_abs": 3.814697265625e-06,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.31.attn.wo_a",
+    "group": 3,
+    "m": 2,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.31.attn.wo_a",
+    "group": 3,
+    "m": 4,
+    "seed": 0,
+    "rmse": 8.126352440740447e-06,
+    "max_abs": 0.0009765625,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.31.attn.wo_a",
+    "group": 3,
+    "m": 4,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.32.attn.wo_a",
+    "group": 3,
+    "m": 1,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.32.attn.wo_a",
+    "group": 3,
+    "m": 1,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.32.attn.wo_a",
+    "group": 3,
+    "m": 2,
+    "seed": 0,
+    "rmse": 1.0725912602538301e-08,
+    "max_abs": 9.5367431640625e-07,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.32.attn.wo_a",
+    "group": 3,
+    "m": 2,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.32.attn.wo_a",
+    "group": 3,
+    "m": 4,
+    "seed": 0,
+    "rmse": 7.543878410842808e-09,
+    "max_abs": 9.5367431640625e-07,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.32.attn.wo_a",
+    "group": 3,
+    "m": 4,
+    "seed": 1,
+    "rmse": 6.025785842211917e-05,
+    "max_abs": 0.0078125,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.33.attn.wo_a",
+    "group": 3,
+    "m": 1,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.33.attn.wo_a",
+    "group": 3,
+    "m": 1,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.33.attn.wo_a",
+    "group": 3,
+    "m": 2,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.33.attn.wo_a",
+    "group": 3,
+    "m": 2,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.33.attn.wo_a",
+    "group": 3,
+    "m": 4,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.33.attn.wo_a",
+    "group": 3,
+    "m": 4,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.34.attn.wo_a",
+    "group": 3,
+    "m": 1,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.34.attn.wo_a",
+    "group": 3,
+    "m": 1,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.34.attn.wo_a",
+    "group": 3,
+    "m": 2,
+    "seed": 0,
+    "rmse": 2.5882502807661467e-09,
+    "max_abs": 2.384185791015625e-07,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.34.attn.wo_a",
+    "group": 3,
+    "m": 2,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.34.attn.wo_a",
+    "group": 3,
+    "m": 4,
+    "seed": 0,
+    "rmse": 3.7643326322722714e-06,
+    "max_abs": 0.00048828125,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.34.attn.wo_a",
+    "group": 3,
+    "m": 4,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.35.attn.wo_a",
+    "group": 3,
+    "m": 1,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.35.attn.wo_a",
+    "group": 3,
+    "m": 1,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.35.attn.wo_a",
+    "group": 3,
+    "m": 2,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.35.attn.wo_a",
+    "group": 3,
+    "m": 2,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.35.attn.wo_a",
+    "group": 3,
+    "m": 4,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.35.attn.wo_a",
+    "group": 3,
+    "m": 4,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.36.attn.wo_a",
+    "group": 3,
+    "m": 1,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.36.attn.wo_a",
+    "group": 3,
+    "m": 1,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.36.attn.wo_a",
+    "group": 3,
+    "m": 2,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.36.attn.wo_a",
+    "group": 3,
+    "m": 2,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.36.attn.wo_a",
+    "group": 3,
+    "m": 4,
+    "seed": 0,
+    "rmse": 4.961243638135215e-10,
+    "max_abs": 5.960464477539063e-08,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.36.attn.wo_a",
+    "group": 3,
+    "m": 4,
+    "seed": 1,
+    "rmse": 7.801776114035874e-09,
+    "max_abs": 9.5367431640625e-07,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.37.attn.wo_a",
+    "group": 3,
+    "m": 1,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.37.attn.wo_a",
+    "group": 3,
+    "m": 1,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.37.attn.wo_a",
+    "group": 3,
+    "m": 2,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.37.attn.wo_a",
+    "group": 3,
+    "m": 2,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.37.attn.wo_a",
+    "group": 3,
+    "m": 4,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.37.attn.wo_a",
+    "group": 3,
+    "m": 4,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.38.attn.wo_a",
+    "group": 3,
+    "m": 1,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.38.attn.wo_a",
+    "group": 3,
+    "m": 1,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.38.attn.wo_a",
+    "group": 3,
+    "m": 2,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.38.attn.wo_a",
+    "group": 3,
+    "m": 2,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.38.attn.wo_a",
+    "group": 3,
+    "m": 4,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.38.attn.wo_a",
+    "group": 3,
+    "m": 4,
+    "seed": 1,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.39.attn.wo_a",
+    "group": 3,
+    "m": 1,
+    "seed": 0,
+    "rmse": 0.0,
+    "max_abs": 0.0,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.39.attn.wo_a",
+    "group": 3,
+    "m": 1,
+    "seed": 1,
+    "rmse": 4.4692446863336954e-06,
+    "max_abs": 0.000244140625,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.39.attn.wo_a",
+    "group": 3,
+    "m": 2,
+    "seed": 0,
+    "rmse": 4.780514828439664e-08,
+    "max_abs": 3.814697265625e-06,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.39.attn.wo_a",
+    "group": 3,
+    "m": 2,
+    "seed": 1,
+    "rmse": 3.0665321446576854e-06,
+    "max_abs": 0.000244140625,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.39.attn.wo_a",
+    "group": 3,
+    "m": 4,
+    "seed": 0,
+    "rmse": 3.437806483930217e-08,
+    "max_abs": 3.814697265625e-06,
+    "finite": true
+  },
+  {
+    "name": "language_model.model.layers.39.attn.wo_a",
+    "group": 3,
+    "m": 4,
+    "seed": 1,
+    "rmse": 2.188116241086391e-06,
+    "max_abs": 0.000244140625,
+    "finite": true
+  }
+]

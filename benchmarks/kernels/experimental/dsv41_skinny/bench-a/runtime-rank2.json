@@ -1,0 +1,10 @@
+{
+  "rank": 2,
+  "mode": "baseline",
+  "source": "/gpfs/mszn/workspace/vllm/vllm/__init__.py",
+  "sp": true,
+  "fused_shared_layers": 40,
+  "installed": false,
+  "inventory_count": 310,
+  "details": {}
+}

@@ -1,0 +1,211 @@
+{
+  "label": "bench-a",
+  "mode": "baseline",
+  "command": [
+    "bash",
+    "/gpfs/mszn/workspace/dsv41-skinny-full-20260912/serve.sh"
+  ],
+  "started": 1789225916.136369,
+  "native_build": "e7edf17cea217e52701f913cd8491fcacf2d9490",
+  "source_head": "30aa0ade39ab6625674865f578fae19a49cf3e43",
+  "source_diff_sha256": "38e9651feeb59ecb7884ccc579d3e576b4a350342185a2b1ec1d7bf045f0b420",
+  "scripts": {
+    "run_bench.py": "3eb0bdee3b0dbacf6dd5600745dc3d477497397064e9e66cb5380788ceca903d",
+    "skinny_worker.py": "fbac20eb7ec06021d81393d0a94be6b1d6bd81b3dfac14dbfa90c7646b5664dd",
+    "serve.sh": "7287863a418a8d0e6fcfbfa981a09b1bb8d12a07db8052190ad9922e8607a304"
+  },
+  "bench_sha256": "84835687fcbb0ac7f3e4cb2497255a1f59234aedf7452879326d5c8dfc46e94e",
+  "workloads": [
+    [
+      "1k256-c1",
+      1024,
+      256,
+      1,
+      8
+    ],
+    [
+      "1k256-c4",
+      1024,
+      256,
+      4,
+      32
+    ],
+    [
+      "8k1k-c16",
+      8192,
+      1024,
+      16,
+      100
+    ]
+  ],
+  "clients": [
+    {
+      "name": "warm-c64",
+      "command": [
+        "bash",
+        "/gpfs/mszn/workspace/dsv41-shared-vllm-bench-20260912/bench.sh",
+        "1024",
+        "32",
+        "64",
+        "128",
+        "warm-c64.json"
+      ],
+      "throughput": 1248.9014918056241,
+      "tpot": 29.28800511613043,
+      "ttft": 709.6164030244836
+    },
+    {
+      "name": "warm-c16",
+      "command": [
+        "bash",
+        "/gpfs/mszn/workspace/dsv41-shared-vllm-bench-20260912/bench.sh",
+        "8192",
+        "32",
+        "16",
+        "32",
+        "warm-c16.json"
+      ],
+      "throughput": 223.20335290651045,
+      "tpot": 42.17516180154146,
+      "ttft": 955.1819110565702
+    },
+    {
+      "name": "1k256-c1-r1",
+      "command": [
+        "bash",
+        "/gpfs/mszn/workspace/dsv41-shared-vllm-bench-20260912/bench.sh",
+        "1024",
+        "256",
+        "1",
+        "8",
+        "1k256-c1-r1.json"
+      ],
+      "throughput": 126.66361608255474,
+      "tpot": 7.458238068091519,
+      "ttft": 119.18059064191766
+    },
+    {
+      "name": "1k256-c4-r1",
+      "command": [
+        "bash",
+        "/gpfs/mszn/workspace/dsv41-shared-vllm-bench-20260912/bench.sh",
+        "1024",
+        "256",
+        "4",
+        "32",
+        "1k256-c4-r1.json"
+      ],
+      "throughput": 454.75495877401397,
+      "tpot": 7.987526975179494,
+      "ttft": 214.26101076212944
+    },
+    {
+      "name": "8k1k-c16-r1",
+      "command": [
+        "bash",
+        "/gpfs/mszn/workspace/dsv41-shared-vllm-bench-20260912/bench.sh",
+        "8192",
+        "1024",
+        "16",
+        "100",
+        "8k1k-c16-r1.json"
+      ],
+      "throughput": 1434.0184080122715,
+      "tpot": 9.425787554611382,
+      "ttft": 793.4637440438382
+    },
+    {
+      "name": "1k256-c1-r2",
+      "command": [
+        "bash",
+        "/gpfs/mszn/workspace/dsv41-shared-vllm-bench-20260912/bench.sh",
+        "1024",
+        "256",
+        "1",
+        "8",
+        "1k256-c1-r2.json"
+      ],
+      "throughput": 126.75352066741878,
+      "tpot": 7.451036973860955,
+      "ttft": 119.56638339324854
+    },
+    {
+      "name": "1k256-c4-r2",
+      "command": [
+        "bash",
+        "/gpfs/mszn/workspace/dsv41-shared-vllm-bench-20260912/bench.sh",
+        "1024",
+        "256",
+        "4",
+        "32",
+        "1k256-c4-r2.json"
+      ],
+      "throughput": 458.0369487989385,
+      "tpot": 7.979159618530414,
+      "ttft": 200.29491845343728
+    },
+    {
+      "name": "8k1k-c16-r2",
+      "command": [
+        "bash",
+        "/gpfs/mszn/workspace/dsv41-shared-vllm-bench-20260912/bench.sh",
+        "8192",
+        "1024",
+        "16",
+        "100",
+        "8k1k-c16-r2.json"
+      ],
+      "throughput": 1442.0620885218557,
+      "tpot": 9.376310257613023,
+      "ttft": 779.0949944569729
+    },
+    {
+      "name": "1k256-c1-r3",
+      "command": [
+        "bash",
+        "/gpfs/mszn/workspace/dsv41-shared-vllm-bench-20260912/bench.sh",
+        "1024",
+        "256",
+        "1",
+        "8",
+        "1k256-c1-r3.json"
+      ],
+      "throughput": 127.22106371392547,
+      "tpot": 7.45417495787728,
+      "ttft": 111.35118725360371
+    },
+    {
+      "name": "1k256-c4-r3",
+      "command": [
+        "bash",
+        "/gpfs/mszn/workspace/dsv41-shared-vllm-bench-20260912/bench.sh",
+        "1024",
+        "256",
+        "4",
+        "32",
+        "1k256-c4-r3.json"
+      ],
+      "throughput": 458.52925032077314,
+      "tpot": 7.984591890086521,
+      "ttft": 196.444525870902
+    },
+    {
+      "name": "8k1k-c16-r3",
+      "command": [
+        "bash",
+        "/gpfs/mszn/workspace/dsv41-shared-vllm-bench-20260912/bench.sh",
+        "8192",
+        "1024",
+        "16",
+        "100",
+        "8k1k-c16-r3.json"
+      ],
+      "throughput": 1444.8459176015554,
+      "tpot": 9.388592332735373,
+      "ttft": 751.5554372919723
+    }
+  ],
+  "completed": true,
+  "ended": 1789226586.4191847,
+  "server_exit_code": 0
+}

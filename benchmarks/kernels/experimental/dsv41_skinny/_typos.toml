@@ -1,0 +1,10 @@
+# Raw benchmark output must preserve generated text and runtime identifiers.
+[files]
+extend-exclude = ["*.json", "*.log", "*.patch"]
+
+[default]
+extend-ignore-identifiers-re = [".*[Uu][Ee][0-9][Mm][0-9].*"]
+
+[default.extend-words]
+setp = "setp"
+thr = "thr"
