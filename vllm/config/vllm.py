@@ -664,6 +664,18 @@ class VllmConfig:
         return 1
 
     @property
+    def num_encoder_prefill_lookahead_tokens(self) -> int:
+        """Prefill read-ahead that requires cached multimodal embeddings."""
+        speculative_config = self.speculative_config
+        if speculative_config is not None and (
+            speculative_config.use_dspark() or speculative_config.use_dflash()
+        ):
+            # Parallel drafters consume target hidden states and token IDs,
+            # not encoder outputs. Their token/KV lookahead is still required.
+            return 0
+        return self.num_prefill_lookahead_tokens
+
+    @property
     def uniform_decode_query_len(self) -> int:
         """Query length of every request in a uniform decode batch.
 
