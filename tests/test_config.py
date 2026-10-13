@@ -4192,3 +4192,33 @@ def test_hybrid_layer_counts_sparse_attention_as_attention(
             )
             == len(layer_types) - expected_attention
         )
+
+
+@pytest.mark.parametrize(
+    "method,width,multi,prefill,encoder,kv",
+    [
+        ("dspark", 55, False, 1, 0, 55),
+        ("dflash", 4, False, 1, 0, 5),
+        ("eagle", 4, False, 1, 1, 4),
+        ("mtp", 3, True, 3, 3, 3),
+    ],
+)
+def test_encoder_lookahead_preserves_token_and_kv_reservations(
+    method, width, multi, prefill, encoder, kv
+):
+    """Parallel drafting needs token/KV runway without pinning image outputs."""
+    config = VllmConfig.__new__(VllmConfig)
+    config.speculative_config = SimpleNamespace(
+        num_speculative_tokens=width,
+        use_eagle=lambda: True,
+        use_dspark=lambda: method == "dspark",
+        use_dflash=lambda: method == "dflash",
+        uses_draft_model=lambda: False,
+        use_multi_module_mtp=lambda: multi,
+        draft_model_config=SimpleNamespace(
+            hf_config=SimpleNamespace(sample_from_anchor=True)
+        ),
+    )
+    assert config.num_prefill_lookahead_tokens == prefill
+    assert config.num_encoder_prefill_lookahead_tokens == encoder
+    assert config.num_lookahead_tokens == kv

@@ -4638,6 +4638,7 @@ def test_mamba_align_eagle_schedules_encoder_at_boundary():
     scheduler.need_mamba_block_aligned_split = True
     scheduler.use_eagle = True
     scheduler.num_prefill_lookahead = 1
+    scheduler.num_encoder_prefill_lookahead = 1
     scheduler.max_num_encoder_input_tokens = 2048
     scheduler.encoder_cache_manager = EncoderCacheManager(cache_size=2048)
 
@@ -6607,6 +6608,7 @@ def test_free_encoder_inputs_defers_for_eagle_lookahead():
     # _free_encoder_inputs keys off (its read-ahead deferral).
     scheduler.use_eagle = True
     scheduler.num_prefill_lookahead = 1
+    scheduler.num_encoder_prefill_lookahead = 1
     mm_positions = [[PlaceholderRange(offset=50, length=100)]]
     request = create_requests(
         num_requests=1,
@@ -7578,3 +7580,82 @@ def test_diffusion_read_deferral_keeps_a_longer_pp_wait():
     # Deferring this step alone would ask for 6. The PP wait to 7 stands.
     assert "read" not in scheduler.schedule().num_scheduled_tokens
     assert read.next_decode_eligible_step == 7
+
+
+@pytest.mark.parametrize("image_gap", [0, 1])
+@pytest.mark.parametrize("image_length", [12, 900])
+@pytest.mark.parametrize("disable_chunked_mm_input", [False, True])
+@pytest.mark.parametrize("async_scheduling", [False, True])
+def test_dspark_encoder_cache_makes_progress_between_images(
+    image_gap, image_length, disable_chunked_mm_input, async_scheduling
+):
+    """DSpark must consume one image without reserving the next image early."""
+    scheduler = create_scheduler(
+        model="llava-hf/llava-1.5-7b-hf",
+        max_num_batched_tokens=900,
+        max_model_len=2048,
+        disable_chunked_mm_input=disable_chunked_mm_input,
+        async_scheduling=async_scheduling,
+    )
+    # Exercise DSpark's separate token and encoder read-ahead contracts.
+    scheduler.num_prefill_lookahead = 1
+    scheduler.num_encoder_prefill_lookahead = 0
+    scheduler.max_num_encoder_input_tokens = 2 * image_length
+    scheduler.encoder_cache_manager = EncoderCacheManager(
+        cache_size=3 * image_length // 2
+    )
+    second_start = image_length + image_gap
+    request = create_requests(
+        num_requests=1,
+        num_tokens=second_start + image_length + 1,
+        mm_positions=[
+            [
+                PlaceholderRange(offset=0, length=image_length),
+                PlaceholderRange(offset=second_start, length=image_length),
+            ]
+        ],
+        max_tokens=1,
+    )[0]
+    scheduler.add_request(request)
+
+    scheduled_inputs = []
+    while request.num_computed_tokens < request.num_prompt_tokens:
+        output = scheduler.schedule()
+        assert output.num_scheduled_tokens.get(request.request_id, 0) > 0
+        scheduled_inputs.extend(
+            output.scheduled_encoder_inputs.get(request.request_id, [])
+        )
+        scheduler.update_from_output(
+            output,
+            ModelRunnerOutput(
+                req_ids=[request.request_id],
+                req_id_to_index={request.request_id: 0},
+                sampled_token_ids=[[]],
+                logprobs=None,
+                prompt_logprobs_dict={},
+                pooler_output=[],
+            ),
+        )
+    assert scheduled_inputs == [0, 1]
+
+
+def test_free_encoder_inputs_waits_for_inflight_prefill():
+    """Optimistic prefill progress cannot evict an image a queued step reads."""
+    scheduler = create_scheduler(model="llava-hf/llava-1.5-7b-hf")
+    scheduler.num_prefill_lookahead = 1
+    scheduler.num_encoder_prefill_lookahead = 0
+    request = create_requests(
+        num_requests=1,
+        num_tokens=250,
+        mm_positions=[[PlaceholderRange(offset=50, length=100)]],
+    )[0]
+    manager = scheduler.encoder_cache_manager
+    manager.allocate(request, 0)
+    request.num_computed_tokens = 150
+    request.num_in_flight_tokens = 1
+    scheduler._free_encoder_inputs(request)
+    assert manager.get_cached_input_ids(request) == {0}
+
+    request.num_in_flight_tokens = 0
+    scheduler._free_encoder_inputs(request)
+    assert manager.get_cached_input_ids(request) == set()

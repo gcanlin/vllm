@@ -304,6 +304,9 @@ class Scheduler(SchedulerInterface):
         )
         self.prefix_replay_tokens = replay_windows.pop() if replay_windows else 0
         self.num_prefill_lookahead = vllm_config.num_prefill_lookahead_tokens
+        self.num_encoder_prefill_lookahead = (
+            vllm_config.num_encoder_prefill_lookahead_tokens
+        )
         self.dynamic_sd_lookup: list[int] | None = None
         if speculative_config is not None:
             if speculative_config.num_speculative_tokens_per_batch_size:
@@ -743,7 +746,7 @@ class Scheduler(SchedulerInterface):
                     request.num_computed_tokens,
                     num_new_tokens,
                     encoder_compute_budget,
-                    shift_computed_tokens=self.num_prefill_lookahead,
+                    shift_computed_tokens=self.num_encoder_prefill_lookahead,
                 )
 
             # Multi-module MTP: avoid ending a prefill chunk within
@@ -1205,7 +1208,7 @@ class Scheduler(SchedulerInterface):
                             num_computed_tokens,
                             num_new_tokens,
                             encoder_compute_budget,
-                            shift_computed_tokens=self.num_prefill_lookahead,
+                            shift_computed_tokens=self.num_encoder_prefill_lookahead,
                         )
 
                     # Multi-module MTP: avoid ending a prefill chunk within
@@ -2517,10 +2520,12 @@ class Scheduler(SchedulerInterface):
         if not cached_encoder_input_ids:
             return
 
-        # Defer the free by the drafter's look-ahead so an entry stays
-        # referenced until the drafter's read-ahead has also passed it,
-        # mirroring the shift the encoder scheduling path applies.
-        spec_lookahead = self.num_prefill_lookahead
+        # Match the encoder scheduling read-ahead, excluding queued prefill
+        # work and speculative output that may still be rolled back.
+        spec_lookahead = self.num_encoder_prefill_lookahead
+        confirmed_tokens = request.num_computed_tokens - max(
+            request.num_output_placeholders, request.num_in_flight_tokens
+        )
 
         # Here, we use list(set) to avoid modifying the set while iterating
         # over it.
@@ -2528,15 +2533,12 @@ class Scheduler(SchedulerInterface):
             mm_feature = request.mm_features[input_id]
             start_pos = mm_feature.mm_position.offset
             num_tokens = mm_feature.mm_position.length
-            if self.is_encoder_decoder and request.num_computed_tokens > 0:
+            if self.is_encoder_decoder and confirmed_tokens > 0:
                 # With Whisper, as soon as we've generated a single token,
                 # we know we're done with the encoder input. Cross Attention
                 # KVs have been calculated and cached already.
                 self._free_encoder_input(request, input_id)
-            elif (
-                start_pos + num_tokens + spec_lookahead
-                <= request.num_computed_tokens - request.num_output_placeholders
-            ):
+            elif start_pos + num_tokens + spec_lookahead <= confirmed_tokens:
                 # Processed, stored in the decoder KV cache, and far enough past
                 # the placeholder range (plus the drafter's look-ahead) that no
                 # rejection or drafter gather can reference it.
