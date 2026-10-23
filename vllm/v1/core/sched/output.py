@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from functools import cached_property
 from typing import TYPE_CHECKING
@@ -40,7 +40,8 @@ else:
 @dataclass
 class NewRequestData:
     req_id: str
-    prompt_token_ids: list[int] | None
+    # A TokenIds (int32 array) for requests from the scheduler.
+    prompt_token_ids: Sequence[int] | None
     mm_features: list[MultiModalFeatureSpec]
     sampling_params: SamplingParams | None
     pooling_params: PoolingParams | None
@@ -51,7 +52,7 @@ class NewRequestData:
     prompt_is_token_ids: list[bool] | None = None
 
     # Only used for v2 model runner.
-    prefill_token_ids: list[int] | None = None
+    prefill_token_ids: Sequence[int] | None = None
     # DeepSeek-V4.1 only: SWA bounded replay; see Request.replay_start.
     replay_start: int = 0
 
@@ -60,7 +61,7 @@ class NewRequestData:
         cls,
         request: Request,
         block_ids: tuple[list[int], ...],
-        prefill_token_ids: list[int] | None = None,
+        prefill_token_ids: Sequence[int] | None = None,
         uses_mrope: bool = False,
     ) -> "NewRequestData":
         return cls(
