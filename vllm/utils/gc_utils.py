@@ -1,7 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
+import ctypes
 import gc
 import json
+import sys
 import time
 from collections import Counter
 from contextlib import contextmanager, suppress
@@ -11,6 +13,28 @@ import vllm.envs as envs
 from vllm.logger import init_logger
 
 logger = init_logger(__name__)
+
+# PyObject_GC_UnTrack from the C API; CPython only.
+_gc_untrack = None
+if sys.implementation.name == "cpython":
+    _gc_untrack = ctypes.pythonapi.PyObject_GC_UnTrack
+    _gc_untrack.argtypes = [ctypes.py_object]
+    _gc_untrack.restype = None
+
+
+def untrack_atomic_list(values: list[Any] | None) -> None:
+    """Stop the cyclic GC from tracking a list that only ever holds ints or bytes.
+
+    Such a list can never be part of a reference cycle, so the GC has no reason to
+    traverse it. CPython untracks tuples and dicts of atomic values on its own but
+    never lists, and every young-generation collection visits each element of each
+    tracked list: a request's 100K-token prompt list costs about a millisecond per
+    pass. Appending ints or bytes later does not re-track the list.
+
+    The caller must never store any other type of object in the list.
+    """
+    if _gc_untrack is not None and type(values) is list and gc.is_tracked(values):
+        _gc_untrack(values)
 
 
 class GCDebugConfig:

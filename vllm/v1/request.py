@@ -14,6 +14,7 @@ from vllm.multimodal.inputs import MultiModalFeatureSpec
 from vllm.pooling_params import PoolingParams
 from vllm.sampling_params import SamplingParams
 from vllm.utils import length_from_prompt_token_ids_or_embeds
+from vllm.utils.gc_utils import untrack_atomic_list
 from vllm.v1.engine import (
     EngineCoreEvent,
     EngineCoreEventType,
@@ -158,6 +159,10 @@ class Request:
                 for t, is_tok in zip(self.prompt_token_ids, self.prompt_is_token_ids)
             ]
 
+        # Token lists only hold ints: keep the GC from traversing them.
+        untrack_atomic_list(self.prompt_token_ids)
+        untrack_atomic_list(self._all_token_ids)
+
         # Used in async scheduling.
         self.num_output_placeholders = 0
         # Tokens of output in flight when the request was preempted: delivered
@@ -223,6 +228,7 @@ class Request:
         self.spec_decode_metrics: RequestSpecDecodeMetrics | None = None
 
         self.block_hashes: list[BlockHash] = []
+        untrack_atomic_list(self.block_hashes)
         # Store the block hasher without binding self to avoid creating a
         # reference cycle (Request -> partial -> Request) that prevents
         # immediate garbage collection via reference counting.

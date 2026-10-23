@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
+import gc
 from dataclasses import dataclass
 from typing import Any
 
@@ -7,6 +8,7 @@ from vllm.utils.gc_utils import (
     GCDebugConfig,
     _compute_detailed_type,
     _compute_top_gc_collected_objects,
+    untrack_atomic_list,
 )
 
 
@@ -83,3 +85,21 @@ def test_gc_debug_config():
     config = GCDebugConfig('{"top_objects":5}')
     assert config.enabled
     assert config.top_objects == 5
+
+
+def test_untrack_atomic_list():
+    values = list(range(1000))
+    assert gc.is_tracked(values)
+    untrack_atomic_list(values)
+    assert not gc.is_tracked(values)
+
+    # Still an ordinary list, and appending ints does not re-track it.
+    values.append(1000)
+    values.extend([1001, 1002])
+    del values[-1]
+    assert values[-2:] == [1000, 1001]
+    assert not gc.is_tracked(values)
+
+    # Anything but a list is left alone.
+    untrack_atomic_list(None)
+    untrack_atomic_list(tuple(values))
