@@ -7,7 +7,8 @@ import multiprocessing
 import threading
 import time
 import weakref
-from collections.abc import Callable, Sequence
+from array import array
+from collections.abc import Callable, Iterable, Sequence
 from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from multiprocessing import connection
@@ -43,6 +44,67 @@ if TYPE_CHECKING:
 logger = init_logger(__name__)
 
 T = TypeVar("T")
+
+
+class TokenIds(array):
+    """Token ids stored as one int32 buffer instead of a list of int objects.
+
+    A ``list[int]`` costs about 36 B per token (a pointer plus an int object), and
+    the cyclic GC visits every element of every tracked list on each collection:
+    with 100K-token prompts the token lists of live requests dominate EngineCore
+    GC pauses. An array stores 4 B per token and the GC never looks inside it.
+
+    Slices and ``copy()`` return lists and equality compares element-wise with
+    lists and tuples, so code written for ``list[int]`` keeps working; mutation
+    (``append``, ``extend``, ``pop``, ``del``) is the array's own.
+    """
+
+    __slots__ = ()
+
+    def __new__(cls, *args: Any) -> "TokenIds":
+        if args and isinstance(args[0], str):
+            # array's own (typecode, initializer) form, used when unpickling.
+            return super().__new__(cls, *args)
+        values = args[0] if args else ()
+        if isinstance(values, array) and values.typecode == "i":
+            ids = super().__new__(cls, "i")
+            ids.frombytes(memoryview(values).cast("B"))
+            return ids
+        return super().__new__(cls, "i", values)
+
+    @overload
+    def __getitem__(self, item: int) -> int: ...
+
+    @overload
+    def __getitem__(self, item: slice) -> list[int]: ...
+
+    def __getitem__(self, item: int | slice) -> int | list[int]:
+        if isinstance(item, slice):
+            return array.__getitem__(self, item).tolist()
+        return array.__getitem__(self, item)
+
+    def copy(self) -> list[int]:
+        return self.tolist()
+
+    def __eq__(self, other: object) -> bool:
+        if isinstance(other, (list, tuple)):
+            return len(self) == len(other) and self.tolist() == list(other)
+        return array.__eq__(self, other)
+
+    def __ne__(self, other: object) -> bool:
+        result = self.__eq__(other)
+        return result if result is NotImplemented else not result
+
+    __hash__ = None  # type: ignore[assignment]
+
+    def __add__(self, other: Iterable[int]) -> list[int]:  # type: ignore[override]
+        return self.tolist() + list(other)
+
+    def __radd__(self, other: Iterable[int]) -> list[int]:
+        return list(other) + self.tolist()
+
+    def __repr__(self) -> str:
+        return f"TokenIds({self.tolist()})"
 
 
 class ConstantList(Generic[T], Sequence):

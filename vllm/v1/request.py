@@ -23,7 +23,7 @@ from vllm.v1.engine import (
 from vllm.v1.kv_hints import KvHintsEnvelope
 from vllm.v1.metrics.stats import PrefillStats, RequestSpecDecodeMetrics
 from vllm.v1.structured_output.request import StructuredOutputRequest
-from vllm.v1.utils import ConstantList
+from vllm.v1.utils import ConstantList, TokenIds
 
 if TYPE_CHECKING:
     from vllm.lora.request import LoRARequest
@@ -131,7 +131,9 @@ class Request:
         else:
             raise ValueError("sampling_params and pooling_params can't both be unset")
 
-        self.prompt_token_ids = prompt_token_ids
+        self.prompt_token_ids = (
+            TokenIds(prompt_token_ids) if prompt_token_ids is not None else None
+        )
         self.prompt_embeds = prompt_embeds
         # Per-position mask used in mixed-mode (chat completion with
         # prompt_embeds). `None` except when both `prompt_token_ids` and
@@ -145,18 +147,18 @@ class Request:
         )
         self._output_token_ids: list[int] = []
         if self.prompt_token_ids is None:
-            self._all_token_ids: list[int] = [0] * self.num_prompt_tokens
+            self._all_token_ids = TokenIds([0] * self.num_prompt_tokens)
         elif self.prompt_is_token_ids is None:
-            self._all_token_ids = self.prompt_token_ids.copy()
+            self._all_token_ids = TokenIds(self.prompt_token_ids)
         else:
             # Mixed-mode prompt: positions covered by prompt_embeds hold a sentinel
             # special token id that may lie outside the embedding. Zero them, matching
             # the no-token-ids case above, so embedding gathers over these placeholder
             # ids stay in bounds; the actual inputs come from prompt_embeds.
-            self._all_token_ids = [
+            self._all_token_ids = TokenIds(
                 t if is_tok else 0
                 for t, is_tok in zip(self.prompt_token_ids, self.prompt_is_token_ids)
-            ]
+            )
 
         # Used in async scheduling.
         self.num_output_placeholders = 0
