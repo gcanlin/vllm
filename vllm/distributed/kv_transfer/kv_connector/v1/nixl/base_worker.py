@@ -112,6 +112,16 @@ _INVALID_PEER_MAX_BACKOFF_S = 60.0
 _MAX_HYBRID_BLOCK_SPLIT = 128
 
 
+def _is_remote_disconnect(error: BaseException | None) -> bool:
+    """Whether a NIXL call failed because the peer's endpoint is gone.
+
+    The local metadata survives this, so the metadata probe cannot detect it.
+    Matched by name: the bindings module differs per CUDA build (nixl_cu12,
+    nixl_cu13).
+    """
+    return error is not None and type(error).__name__ == "nixlRemoteDisconnectError"
+
+
 def _region_sort_key(layer_name: str) -> tuple[tuple[int, int | str], ...]:
     """Sort transfer regions in model-layer order, then by cache name."""
     return tuple(
@@ -834,6 +844,8 @@ class NixlBaseConnectorWorker:
         )
         # Failed reads need a local metadata probe; invalid peers wait for drain.
         self._failed_remote_engines: set[EngineId] = set()
+        # Failed reads whose endpoint was disconnected; invalid without a probe.
+        self._disconnected_remote_engines: set[EngineId] = set()
         self._invalid_remote_engines: set[EngineId] = set()
         # Invalid engine -> (backoff, earliest release time). Kept across release
         # so that repeat invalidations back off.
@@ -3485,7 +3497,9 @@ class NixlBaseConnectorWorker:
                         req_id=req_id,
                         error=e,
                     )
-                    if not self._handle_failed_transfer(req_id, handle, failed_req_ids):
+                    if not self._handle_failed_transfer(
+                        req_id, handle, failed_req_ids, error=e
+                    ):
                         in_progress.append(handle)
 
             if not in_progress:
@@ -3516,6 +3530,7 @@ class NixlBaseConnectorWorker:
         handle: int | None,
         failed_req_ids: set[str] | None = None,
         record_failed_transfer: bool = True,
+        error: BaseException | None = None,
     ) -> bool:
         """Record a failure and release its handle, returning False to retain it.
 
@@ -3528,6 +3543,7 @@ class NixlBaseConnectorWorker:
                 transport-failure metric. Callers that already recorded a more
                 specific metric (eg KV expiry, reported separately from
                 transport failures) pass False.
+            error: The exception that failed the transfer, if any.
 
         """
         if record_failed_transfer:
@@ -3538,6 +3554,8 @@ class NixlBaseConnectorWorker:
                 and meta.remote is not None
             ):
                 self._failed_remote_engines.add(meta.remote.engine_id)
+                if _is_remote_disconnect(error):
+                    self._disconnected_remote_engines.add(meta.remote.engine_id)
         if failed_req_ids is not None:
             failed_req_ids.add(req_id)
         return handle is None or self._try_release_xfer_handle(req_id, handle)
@@ -3998,8 +4016,11 @@ class NixlBaseConnectorWorker:
         for engine_id in self._failed_remote_engines - self._invalid_remote_engines:
             agents = self._remote_agents.get(engine_id, {}).values()
             try:
-                # No descriptors: query local existence, not peer health.
-                if not all(map(self.nixl_wrapper.check_remote_metadata, agents)):
+                # No descriptors: query local existence, not peer health. A
+                # disconnected endpoint never recovers, so re-handshake it too.
+                if engine_id in self._disconnected_remote_engines or not all(
+                    map(self.nixl_wrapper.check_remote_metadata, agents)
+                ):
                     self._mark_remote_engine_invalid(engine_id, now)
             except Exception:
                 logger.warning(
@@ -4008,6 +4029,7 @@ class NixlBaseConnectorWorker:
                     exc_info=True,
                 )
         self._failed_remote_engines.clear()
+        self._disconnected_remote_engines.clear()
         # Invalid peers keep rejecting new reads until their backoff has elapsed.
         invalid = {
             engine_id
