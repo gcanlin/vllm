@@ -1253,8 +1253,11 @@ class Worker(WorkerBase):
             )
             # Take the hidden states from a dummy forward pass, as V1 does, so they
             # have the LM head's input size (e.g. OPT projects to a smaller size).
+            # Eager, also as V1 does: a CUDA graph would pad max_num_reqs tokens
+            # into longer dummy requests, unlike the batch the DP ranks synced,
+            # and an MTP drafter reusing that sync rejects it.
             _, sample_hidden_states = self.model_runner._dummy_run(
-                num_tokens=max_num_reqs, skip_eplb=True
+                num_tokens=max_num_reqs, skip_eplb=True, is_profile=True
             )
             self.model_runner._dummy_sampler_run(hidden_states=sample_hidden_states)
             del sample_hidden_states
