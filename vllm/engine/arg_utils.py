@@ -114,7 +114,11 @@ from vllm.config.parallel import (
     DistributedExecutorBackend,
     ExpertPlacementStrategy,
 )
-from vllm.config.scheduler import SchedulerPolicy
+from vllm.config.scheduler import (
+    PrefillStepBudgetConfig,
+    PrefillTokenCapConfig,
+    SchedulerPolicy,
+)
 from vllm.config.utils import get_field
 from vllm.config.vllm import OptimizationLevel, PerformanceMode
 from vllm.config.watermarking import WatermarkConfig
@@ -766,6 +770,10 @@ class EngineArgs:
     enable_mm_processor_stats: bool = ObservabilityConfig.enable_mm_processor_stats
     scheduling_policy: SchedulerPolicy = SchedulerConfig.policy
     residual_sjf_max_wait_ms: int = SchedulerConfig.residual_sjf_max_wait_ms
+    prefill_step_budget: PrefillStepBudgetConfig | None = (
+        SchedulerConfig.prefill_step_budget
+    )
+    prefill_token_cap: PrefillTokenCapConfig | None = SchedulerConfig.prefill_token_cap
     scheduler_cls: str | type[object] | None = SchedulerConfig.scheduler_cls
 
     pooler_config: PoolerConfig | None = ModelConfig.pooler_config
@@ -1796,6 +1804,12 @@ class EngineArgs:
             **scheduler_kwargs["residual_sjf_max_wait_ms"],
         )
         scheduler_group.add_argument(
+            "--prefill-step-budget", **scheduler_kwargs["prefill_step_budget"]
+        )
+        scheduler_group.add_argument(
+            "--prefill-token-cap", **scheduler_kwargs["prefill_token_cap"]
+        )
+        scheduler_group.add_argument(
             "--enable-chunked-prefill",
             **{
                 **scheduler_kwargs["enable_chunked_prefill"],
@@ -2686,6 +2700,8 @@ class EngineArgs:
             is_encoder_decoder=model_config.is_encoder_decoder,
             policy=self.scheduling_policy,
             residual_sjf_max_wait_ms=self.residual_sjf_max_wait_ms,
+            prefill_step_budget=self.prefill_step_budget,
+            prefill_token_cap=self.prefill_token_cap,
             scheduler_cls=self.scheduler_cls,
             long_prefill_token_threshold=self.long_prefill_token_threshold,
             long_prefill_token_threshold_adaptive=(

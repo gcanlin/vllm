@@ -49,6 +49,7 @@ from vllm.v1.core.sched.output import (
     ScheduledEncoderInputStats,
     SchedulerOutput,
 )
+from vllm.v1.core.sched.prefill_budget import PrefillStepBudget, PrefillTokenCap
 from vllm.v1.core.sched.request_queue import (
     RequestQueue,
     SchedulingPolicy,
@@ -216,6 +217,18 @@ class Scheduler(SchedulerInterface):
         assert num_gpu_blocks is not None and num_gpu_blocks > 0
 
         self.block_size = block_size
+        self.prefill_step_budget = (
+            PrefillStepBudget(
+                self.scheduler_config.prefill_step_budget, vllm_config, block_size
+            )
+            if self.scheduler_config.prefill_step_budget is not None
+            else None
+        )
+        self.prefill_token_cap = (
+            PrefillTokenCap(self.scheduler_config.prefill_token_cap, vllm_config)
+            if self.scheduler_config.prefill_token_cap is not None
+            else None
+        )
         self.dcp_world_size = vllm_config.parallel_config.decode_context_parallel_size
         self.pcp_world_size = vllm_config.parallel_config.prefill_context_parallel_size
 
@@ -720,6 +733,15 @@ class Scheduler(SchedulerInterface):
         req_to_new_blocks: dict[str, KVCacheBlocks] = {}
         num_scheduled_tokens: dict[str, int] = {}
         token_budget = self.max_num_scheduled_tokens
+        # The prefill token cap, if this step is capped.
+        token_cap = self.prefill_token_cap
+        if token_cap is not None and not token_cap.capped(len(self.waiting)):
+            token_cap = None
+        if token_cap is not None:
+            token_budget = min(token_budget, token_cap.config.step_tokens)
+        prefill_budget = self.prefill_step_budget
+        if prefill_budget is not None:
+            prefill_budget.begin_step()
         spec = self.vllm_config.speculative_config
         draft_slots = spec.max_num_new_slots_for_drafting if spec is not None else 0
         input_budget = self.scheduler_config.max_num_batched_tokens
@@ -769,6 +791,10 @@ class Scheduler(SchedulerInterface):
             # cuts a request below max_num_batched_tokens / num requests.
             long_prefill_token_threshold = max(
                 long_prefill_token_threshold, input_budget // num_eligible_reqs
+            )
+        if token_cap is not None and long_prefill_token_threshold > 0:
+            long_prefill_token_threshold = min(
+                long_prefill_token_threshold, token_cap.config.chunk_tokens
             )
 
         # Local prefill cadence: hold prefill until the interval since the last
@@ -858,6 +884,14 @@ class Scheduler(SchedulerInterface):
                 - request.num_computed_tokens
                 - self.num_sampled_tokens_per_step,
             )
+
+            if prefill_budget is not None and request.is_prefill_chunk:
+                num_new_tokens = prefill_budget.fit(
+                    request.num_computed_tokens, num_new_tokens
+                )
+                if num_new_tokens == 0:
+                    req_index += 1
+                    continue
 
             # Apply Mamba alignment before encoder caps.
             if self.need_mamba_block_aligned_split:
@@ -999,6 +1033,8 @@ class Scheduler(SchedulerInterface):
             # Schedule the request.
             scheduled_running_reqs.append(request)
             prefill_scheduled |= request.is_prefill_chunk
+            if prefill_budget is not None and request.is_prefill_chunk:
+                prefill_budget.add(request.num_computed_tokens, num_new_tokens)
             request_id = request.request_id
             req_to_new_blocks[request_id] = new_blocks
             num_scheduled_tokens[request_id] = num_new_tokens
@@ -1350,6 +1386,16 @@ class Scheduler(SchedulerInterface):
                     num_new_tokens = min(num_new_tokens, request_token_budget)
                     assert num_new_tokens > 0
 
+                    if prefill_budget is not None and not pad_spec_decode:
+                        num_new_tokens = prefill_budget.fit(
+                            num_computed_tokens, num_new_tokens
+                        )
+                        if num_new_tokens == 0:
+                            if prefill_budget.may_skip(num_computed_tokens):
+                                skip_request(request_queue)
+                                continue
+                            break
+
                     # Apply Mamba alignment before encoder caps.
                     if self.need_mamba_block_aligned_split:
                         num_new_tokens = self._mamba_block_aligned_split(
@@ -1573,6 +1619,8 @@ class Scheduler(SchedulerInterface):
                 num_scheduled_tokens[request_id] = num_new_tokens
                 token_budget -= num_new_tokens
                 input_budget -= num_new_tokens + draft_slots
+                if prefill_budget is not None and not pad_spec_decode:
+                    prefill_budget.add(num_computed_tokens, num_new_tokens)
                 request.status = RequestStatus.RUNNING
                 request.num_computed_tokens = num_computed_tokens
                 self._set_kv_fetch_stage(request, None)
@@ -1618,6 +1666,9 @@ class Scheduler(SchedulerInterface):
             if not defer_prefills:
                 _, num_waiting = self.get_request_counts()
                 self.prefill_capacity_bound = num_waiting > len(self.deferred_waiting)
+
+        if prefill_budget is not None:
+            prefill_budget.end_step()
 
         # Check if the scheduling constraints are satisfied.
         total_num_scheduled_tokens = sum(num_scheduled_tokens.values())

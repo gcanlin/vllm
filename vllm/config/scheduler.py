@@ -22,6 +22,82 @@ SchedulerPolicy = Literal["fcfs", "priority", "residual_sjf"]
 
 
 @config
+class PrefillStepBudgetConfig:
+    """Prefill step time budget from a fitted cost model, for data-parallel
+    prefill instances, whose ranks wait for each other at every MoE layer.
+
+    A prefill chunk of q new tokens after c context tokens is predicted to take
+    `d + g*c + q*(a + b*c) + b2*q*q` ms of rank-local GPU time, and a step `e` ms
+    on top. Chunks are cut so the step fits the budgets below; the rest of a cut
+    chunk runs in the next step. The default coefficients were fitted for
+    DeepSeek-V4.1-Flash DEP4 prefill on B200."""
+
+    a: float = Field(default=5.87e-3, gt=0)
+    """Cost per new token (ms)."""
+
+    b: float = Field(default=1.32e-8, ge=0)
+    """Cost per new token and context token (ms)."""
+
+    b2: float = Field(default=0.0, ge=0)
+    """Cost per squared new token (ms)."""
+
+    d: float = Field(default=0.94755, ge=0)
+    """Cost per chunk (ms)."""
+
+    g: float = Field(default=4e-6, ge=0)
+    """Cost per context token of a chunk (ms)."""
+
+    e: float = Field(default=6.83366, ge=0)
+    """Cost per step (ms)."""
+
+    budget_ms: float = Field(default=float("inf"), gt=0)
+    """Cap on the predicted step time."""
+
+    ctx_budget_ms: float = Field(default=float("inf"), gt=0)
+    """Cap on the predicted context-dependent time of a step (the `g*c` and
+    `b*q*c` terms)."""
+
+    ctx_balance: tuple[float, float, float] | None = None
+    """`[factor, floor_ms, cap_ms]`: instead of `ctx_budget_ms`, cap the
+    context-dependent time at factor x the mean recent demand of the instance's
+    DP ranks, kept within [floor_ms, cap_ms]."""
+
+    dp_budget: tuple[float, float, float] | None = None
+    """`[factor, floor_ms, cap_ms]`: cap the step time at factor x the largest
+    demand that the instance's other DP ranks published, kept within
+    [floor_ms, cap_ms], so that no rank runs far longer than the others."""
+
+    skip_scan: int = Field(default=16, ge=0)
+    """Waiting requests to scan past when one exceeds the context budget but
+    shorter-context requests behind it may still fit."""
+
+
+@config
+class PrefillTokenCapConfig:
+    """Smaller prefill steps while the instance's queues are short, for lower
+    step latency. The capped or full state is shared by the instance's DP ranks,
+    which run in lockstep: full once any rank has more than `max_waiting`
+    waiting requests, capped again once every rank has had at most
+    `low_waiting` for `hold_s` seconds."""
+
+    step_tokens: int = Field(default=8192, gt=0)
+    """Token budget of a capped step."""
+
+    chunk_tokens: int = Field(default=4096, gt=0)
+    """Longest prefill chunk of a request in a capped step."""
+
+    max_waiting: int = Field(default=16, ge=0)
+    """Waiting requests on a rank above which the instance runs full steps."""
+
+    low_waiting: int = Field(default=10, ge=0)
+    """Waiting requests on every rank at or below which the instance returns to
+    capped steps after `hold_s`."""
+
+    hold_s: float = Field(default=1.0, ge=0)
+    """Seconds every rank must stay at or below `low_waiting` before capping."""
+
+
+@config
 class SchedulerConfig:
     """Scheduler configuration."""
 
@@ -175,6 +251,13 @@ class SchedulerConfig:
     behave closer to FCFS with a flatter tail; larger values improve mean
     TTFT/E2E at the cost of P95/P99. Start at 1/2 to 1/3 of the target P95 wait
     and adjust after load testing against the P99 budget."""
+
+    prefill_step_budget: PrefillStepBudgetConfig | None = None
+    """Prefill step time budget; see `PrefillStepBudgetConfig`."""
+
+    prefill_token_cap: PrefillTokenCapConfig | None = None
+    """Smaller prefill steps while queues are short; see
+    `PrefillTokenCapConfig`."""
 
     disable_chunked_mm_input: bool = False
     """If set to true and chunked prefill is enabled, we do not want to
