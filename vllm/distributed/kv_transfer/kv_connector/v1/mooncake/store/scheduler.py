@@ -7,6 +7,8 @@
 
 from collections.abc import Sequence
 
+import zmq
+
 from vllm.config import VllmConfig
 from vllm.distributed.kv_transfer.kv_connector.v1.base import (
     KVConnectorMetadata,
@@ -25,6 +27,8 @@ from vllm.distributed.kv_transfer.kv_connector.v1.mooncake.store.data import (  
 from vllm.distributed.kv_transfer.kv_connector.v1.mooncake.store.worker import (  # noqa: E501
     LookupKeyClient,
     LookupState,
+    get_zmq_path_load_kick,
+    load_kick_enabled,
 )
 from vllm.logger import init_logger
 from vllm.utils.math_utils import cdiv
@@ -139,6 +143,9 @@ def _partial_tail_non_mamba_puts(
 class MooncakeStoreScheduler:
     """Scheduler-side component for MooncakeStoreConnector."""
 
+    # Default for schedulers built without __init__ (unit tests).
+    _load_kick_socket: zmq.Socket | None = None
+
     def __init__(
         self,
         vllm_config: VllmConfig,
@@ -191,6 +198,13 @@ class MooncakeStoreScheduler:
             and not self.enable_lookup
             and not self.save_decode_cache
         )
+        if load_kick_enabled(vllm_config) and not self._capacity_only:
+            # See MooncakeStoreWorker._start_load_kick_receiver. IMMEDIATE drops
+            # a kick while no worker is connected; the step metadata still
+            # carries the load.
+            self._load_kick_socket = zmq.Context.instance().socket(zmq.PUSH)
+            self._load_kick_socket.setsockopt(zmq.IMMEDIATE, 1)
+            self._load_kick_socket.connect(get_zmq_path_load_kick(vllm_config))
         self._store_coord: MooncakeStoreCoordinator | None = None
         self.enable_partial_hash_hits = False
         if not self._capacity_only:
@@ -579,7 +593,22 @@ class MooncakeStoreScheduler:
 
         if not self._capacity_only:
             self._reference_save_blocks(meta.requests)
+        if self._load_kick_socket is not None:
+            self._kick_loads(meta.requests)
         return meta
+
+    def _kick_loads(self, requests: list[ReqMeta]) -> None:
+        """Push this step's loads to the worker now, ahead of the step."""
+        assert self._load_kick_socket is not None
+        for req_meta in requests:
+            load_spec = req_meta.load_spec
+            if load_spec is None or not load_spec.can_load:
+                continue
+            try:
+                self._load_kick_socket.send_pyobj(req_meta, zmq.NOBLOCK)
+            except zmq.Again:
+                continue
+            req_meta.load_kicked = True
 
     def _apply_current_save_block_ids(
         self,

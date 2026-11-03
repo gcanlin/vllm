@@ -12,6 +12,7 @@ and worker classes; the connector classes here only forward calls.
 * ``NixlConnector`` – backward-compatible alias for :class:`NixlPullConnector`.
 """
 
+from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
 import torch
@@ -364,6 +365,8 @@ class NixlBaseConnector(KVConnectorBase_V1, SupportsHMA):
 class NixlPullConnector(NixlBaseConnector):
     """Pull-based (READ) NIXL KV transfer connector."""
 
+    connector_worker: NixlPullConnectorWorker | None
+
     def get_num_cached_tokens(
         self, request: "Request", num_computed_tokens: int
     ) -> int | None:
@@ -410,6 +413,18 @@ class NixlPullConnector(NixlBaseConnector):
         assert isinstance(self.connector_worker, NixlPullConnectorWorker)
         assert isinstance(self._connector_metadata, NixlConnectorMetadata)
         self.connector_worker.start_load_kv(self._connector_metadata)
+
+    def has_pending_recving(self) -> bool:
+        assert self.connector_worker is not None
+        return self.connector_worker.has_pending_recving()
+
+    def poll_finished_recving(self) -> set[str]:
+        assert self.connector_worker is not None
+        return self.connector_worker.poll_finished_recving()
+
+    def set_recv_done_notifier(self, notify: Callable[[], None]) -> bool:
+        # A producer never receives, so it has nothing to report early.
+        return self.kv_transfer_config.kv_role == "kv_producer"
 
 
 class NixlPushConnector(NixlBaseConnector):

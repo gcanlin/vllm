@@ -132,6 +132,7 @@ class EngineCore:
     # object.__new__.
     _checkpoint_state = CheckpointState.RUNNING
     _checkpoint_error: str | None = None
+    _enable_early_recv = False
     _kv_cache_reclaimable = False
 
     def __init__(
@@ -161,6 +162,8 @@ class EngineCore:
 
         # Setup Model.
         self.model_executor = executor_class(vllm_config)
+        kv_config = vllm_config.kv_transfer_config
+        self._enable_early_recv = bool(kv_config and kv_config.enable_early_recv)
         self._pooler_config_logged = False
         if executor_fail_callback is not None:
             self.model_executor.register_failure_callback(executor_fail_callback)
@@ -706,6 +709,11 @@ class EngineCore:
         Overridden by the DP engine core; never throttles otherwise."""
         return False
 
+    def _poll_early_finished_recving(self) -> None:
+        # KV loads the workers finished since the last step can run in this one.
+        if finished_recving := self.model_executor.take_early_finished_recving():
+            self.scheduler.add_finished_recving(finished_recving)
+
     def step(self) -> tuple[dict[int, EngineCoreOutputs], bool]:
         """Schedule, execute, and make output.
 
@@ -716,6 +724,8 @@ class EngineCore:
         # or finished and not yet removed from the batch.
         if not self.scheduler.has_requests():
             return {}, False
+        if self._enable_early_recv:
+            self._poll_early_finished_recving()
         scheduler_output = self.scheduler.schedule(self._should_throttle_prefills())
         future = self.model_executor.execute_model(scheduler_output, non_block=True)
         grammar_output = self.scheduler.get_grammar_bitmask(scheduler_output)
@@ -774,6 +784,8 @@ class EngineCore:
         model_executed = False
         deferred_scheduler_output = None
         if self.scheduler.has_requests():
+            if self._enable_early_recv:
+                self._poll_early_finished_recving()
             scheduler_output = self.scheduler.schedule(self._should_throttle_prefills())
             with self.log_error_detail(scheduler_output):
                 exec_future = self.model_executor.execute_model(

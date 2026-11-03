@@ -395,6 +395,10 @@ def _log_mooncake_load_tier_summary(
 class KVTransferThread(threading.Thread):
     """Base class for async KV cache transfer threads."""
 
+    # Called after a request is marked finished (see
+    # MooncakeStoreWorker.set_recv_done_notifier).
+    on_finished: Callable[[], None] | None = None
+
     def __init__(
         self,
         store: Any,
@@ -431,6 +435,8 @@ class KVTransferThread(threading.Thread):
     def set_finished_request(self, req_id: str):
         with self.done_task_lock:
             self.finished_requests.add(req_id)
+        if self.on_finished is not None:
+            self.on_finished()
 
     def run(self):
         self.ready_event.set()
@@ -1193,6 +1199,7 @@ class KVCacheStoreRecvingThread(KVTransferThread):
         request_queue: queue.Queue[Any] | None = None,
         group_participates: Sequence[bool] | None = None,
         is_hma_required: bool = False,
+        early_recv: bool = False,
     ):
         super().__init__(
             store,
@@ -1216,6 +1223,9 @@ class KVCacheStoreRecvingThread(KVTransferThread):
         # are only unique within a group, so failures are reported per request.
         self._is_hma_required = is_hma_required
         self._failed_requests: set[str] = set()
+        # With early receive: requests with any load error, kept until they are
+        # popped as finished.
+        self._load_error_requests: set[str] | None = set() if early_recv else None
         self.disk_offload_buffer_budget_bytes = disk_offload_buffer_budget_bytes
         self.usable_disk_offload_buffer_budget_bytes = (
             None
@@ -1240,7 +1250,21 @@ class KVCacheStoreRecvingThread(KVTransferThread):
             self._failed_requests.clear()
         return failed
 
+    def pop_finished_requests(self) -> tuple[set[str], set[str]]:
+        """Pop finished loads as (loaded without errors, loaded with errors)."""
+        assert self._load_error_requests is not None
+        with self.done_task_lock:
+            finished, self.finished_requests = self.finished_requests, set()
+            with_errors = finished & self._load_error_requests
+            self._load_error_requests -= with_errors
+        return finished - with_errors, with_errors
+
     def _report_load_error(self, req_id: str, block_ids: list[int]) -> None:
+        if self._load_error_requests is not None:
+            # Marked before the request is set finished, so a finished request
+            # is never popped as loaded without errors.
+            with self.done_task_lock:
+                self._load_error_requests.add(req_id)
         if self._is_hma_required:
             self.set_failed_request(req_id)
         else:
@@ -1459,6 +1483,10 @@ class KVCacheStoreRecvingThread(KVTransferThread):
 class MooncakeStoreWorker:
     """Worker-side component for MooncakeStoreConnector."""
 
+    # Defaults for workers built without __init__ (unit tests).
+    _recv_state_lock = threading.Lock()
+    _load_kick_ctx: zmq.Context | None = None
+
     @staticmethod
     def _create_mem_pool(
         extra_config: dict[str, Any], model_config: ModelConfig
@@ -1632,6 +1660,20 @@ class MooncakeStoreWorker:
         self.kv_recv_threads: list[KVCacheStoreRecvingThread] = []
         self.num_recv_threads = max(1, envs.VLLM_MOONCAKE_LOAD_RECV_THREADS)
         self.recv_request_queue: queue.Queue[ReqMeta] = queue.Queue()
+        self.early_recv = vllm_config.kv_transfer_config.enable_early_recv
+        self._load_kick_path = (
+            get_zmq_path_load_kick(vllm_config)
+            if load_kick_enabled(vllm_config)
+            else None
+        )
+        # With early receive: queued loads not yet popped as finished, and
+        # finished loads held for the path that reports them.
+        self._loading_req_ids: set[str] = set()
+        self._loaded_req_ids: set[str] = set()
+        self._loaded_with_errors_req_ids: set[str] = set()
+        # Guards the three sets above once a notified thread may poll them
+        # concurrently with the worker thread (set_recv_done_notifier).
+        self._recv_state_lock = threading.Lock()
         # Device KV regions (addr -> len) registered with the store.
         self._device_regions: dict[int, int] = {}
         # Device regions unregistered for sleep and not yet registered again.
@@ -2230,6 +2272,7 @@ class MooncakeStoreWorker:
                     for group in self._kv_cache_groups
                 ],
                 is_hma_required=self._is_hma_required,
+                early_recv=self.early_recv,
             )
             recv_thread.name = f"KVCacheStoreRecvingThread-{i}"
             recv_thread.start()
@@ -2240,6 +2283,56 @@ class MooncakeStoreWorker:
         logger.info(
             "Started %d Mooncake KV-load receive thread(s)", self.num_recv_threads
         )
+        # With early receive, the scheduler also pushes each load when it
+        # decides it (MooncakeStoreScheduler._kick_loads), so the load starts
+        # about one prefill step earlier than with the step metadata.
+        if self._load_kick_path is not None:
+            self._start_load_kick_receiver(self._load_kick_path)
+
+    def _start_load_kick_receiver(self, path: str) -> None:
+        # Request ids of loads issued by one of {kick, step metadata} whose
+        # other copy has not arrived yet; the second copy is then skipped.
+        self._load_kick_lock = threading.Lock()
+        self._kicked_req_ids: set[str] = set()
+        self._meta_issued_req_ids: set[str] = set()
+        ipc = path.removeprefix("ipc://")
+        if os.path.exists(ipc):
+            os.unlink(ipc)
+        self._load_kick_ctx = zmq.Context()
+        sock = make_zmq_socket(self._load_kick_ctx, path, zmq.PULL, bind=True)
+        threading.Thread(
+            target=self._load_kick_loop, args=(sock,), name="mc-load-kick", daemon=True
+        ).start()
+
+    def _load_kick_loop(self, sock: zmq.Socket) -> None:
+        while True:
+            try:
+                request = sock.recv_pyobj()
+            except zmq.ContextTerminated:
+                sock.close(linger=0)
+                return
+            self._issue_load(request, kicked=True)
+
+    def _issue_load(self, request: ReqMeta, kicked: bool) -> None:
+        """Queue a load; of its kick and its step metadata, the first issues it."""
+        if self._load_kick_ctx is not None and (kicked or request.load_kicked):
+            mine, other = (
+                (self._kicked_req_ids, self._meta_issued_req_ids)
+                if kicked
+                else (self._meta_issued_req_ids, self._kicked_req_ids)
+            )
+            with self._load_kick_lock:
+                if request.req_id in other:
+                    other.discard(request.req_id)
+                    return
+                mine.add(request.req_id)
+        load_spec = request.load_spec
+        assert load_spec is not None
+        load_spec.token_len = load_spec.kvpool_cached_tokens
+        if self.early_recv:
+            with self._recv_state_lock:
+                self._loading_req_ids.add(request.req_id)
+        self.recv_request_queue.put(request)
 
     def unregister_kv_caches(self) -> None:
         """Unregister device KV buffers after the engine has drained transfers."""
@@ -2270,8 +2363,7 @@ class MooncakeStoreWorker:
             if load_spec is None or not load_spec.can_load:
                 continue
 
-            load_spec.token_len = load_spec.kvpool_cached_tokens
-            self.recv_request_queue.put(request)
+            self._issue_load(request, kicked=False)
 
         assert self.load_async, "load_async must be True for better performance."
 
@@ -2315,7 +2407,15 @@ class MooncakeStoreWorker:
         # on a `finished_sending` signal to get its blocks back.
         done_sending: set[str] = set()
         done_recving: set[str] = set()
-        if self.load_async:
+        if self.early_recv:
+            # Loads without errors are reported by poll_finished_recving().
+            with self._recv_state_lock:
+                self._pop_finished_loads()
+                done_recving, self._loaded_with_errors_req_ids = (
+                    self._loaded_with_errors_req_ids,
+                    set(),
+                )
+        elif self.load_async:
             for recv_thread in self.kv_recv_threads:
                 done_recving |= recv_thread.get_and_clear_finished_requests()
 
@@ -2326,6 +2426,44 @@ class MooncakeStoreWorker:
             self.tp_rank,
         )
         return done_sending, done_recving
+
+    def _pop_finished_loads(self) -> None:
+        """Caller holds _recv_state_lock."""
+        for recv_thread in self.kv_recv_threads:
+            loaded, with_errors = recv_thread.pop_finished_requests()
+            self._loaded_req_ids |= loaded
+            self._loaded_with_errors_req_ids |= with_errors
+            self._loading_req_ids -= loaded | with_errors
+
+    def has_pending_recving(self) -> bool:
+        return bool(self._loading_req_ids or self._loaded_req_ids)
+
+    def poll_finished_recving(self) -> set[str]:
+        """Pop the loads that finished without errors.
+
+        Loads with errors stay on the get_finished() path, which reports them
+        in the same step output as, or after, their invalid block ids or
+        failed requests.
+        """
+        if not self.has_pending_recving():
+            return set()
+        with self._recv_state_lock:
+            self._pop_finished_loads()
+            loaded, self._loaded_req_ids = self._loaded_req_ids, set()
+        return loaded
+
+    def set_recv_done_notifier(self, notify: Callable[[], None]) -> bool:
+        """Call ``notify()`` from the receive threads whenever a load finishes.
+
+        The receive state is lock-guarded, so poll_finished_recving() may then
+        run on the notified thread.
+        """
+        if not self.early_recv:
+            # Nothing is ever reported early: trivially safe to poll anywhere.
+            return True
+        for recv_thread in self.kv_recv_threads:
+            recv_thread.on_finished = notify
+        return True
 
     def get_block_ids_with_load_errors(self) -> set[int]:
         block_ids: set[int] = set()
@@ -2633,6 +2771,10 @@ class MooncakeStoreWorker:
         if store is None:
             return
         self.store = None
+        if self._load_kick_ctx is not None:
+            # Unblocks the kick thread, which closes its socket and exits.
+            self._load_kick_ctx.term()
+            self._load_kick_ctx = None
         deadline = time.monotonic() + 5.0
         for thread in (self.kv_send_thread, *self.kv_recv_threads):
             if thread is None:
@@ -2966,6 +3108,31 @@ class LookupKeyClient:
         self.executor.shutdown(wait=True, cancel_futures=True)
         self.socket.close(linger=0)
         self.ctx.term()
+
+
+def load_kick_enabled(vllm_config: VllmConfig) -> bool:
+    """Whether the scheduler pushes each store load to the worker as it
+    decides it. Needs early receive, so that a kicked load finishing before
+    its step is reported ahead of that step's output, and one worker per DP
+    rank to own the kick socket."""
+    assert vllm_config.kv_transfer_config is not None
+    parallel_config = vllm_config.parallel_config
+    return (
+        vllm_config.kv_transfer_config.enable_early_recv
+        and parallel_config.tensor_parallel_size == 1
+        and parallel_config.pipeline_parallel_size == 1
+    )
+
+
+def get_zmq_path_load_kick(vllm_config: VllmConfig) -> str:
+    """IPC path of the scheduler -> worker load kick channel of a DP rank.
+    The DP RPC port tells apart the instances that share a host."""
+    parallel_config = vllm_config.parallel_config
+    return (
+        f"ipc://{envs.VLLM_RPC_BASE_PATH}/mc_load_kick_"
+        f"{parallel_config.data_parallel_rpc_port}_{socket.gethostname()}"
+        f"_dp{parallel_config.data_parallel_index}"
+    )
 
 
 def get_zmq_rpc_path_lookup(vllm_config: VllmConfig) -> str:

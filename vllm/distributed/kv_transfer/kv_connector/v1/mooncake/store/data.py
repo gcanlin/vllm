@@ -282,6 +282,9 @@ class ReqMeta:
 
     can_save: bool | None = None
     load_spec: LoadSpec | None = None
+    # The scheduler also pushed this load to the worker when it decided it
+    # (MooncakeStoreScheduler._kick_loads).
+    load_kicked: bool = False
     current_event: torch.cuda.Event | None = None
 
     token_ids: list[int] | None = None

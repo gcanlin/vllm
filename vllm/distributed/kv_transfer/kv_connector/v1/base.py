@@ -430,6 +430,35 @@ class KVConnectorBase_V1(ABC):
             finished_recving=set(finished_recving or ()),
         )
 
+    def has_pending_recving(self) -> bool:
+        """Whether `poll_finished_recving()` may return anything."""
+        return False
+
+    def poll_finished_recving(self) -> set[str]:
+        """Pop receives that completed successfully since the last poll.
+
+        Called on the worker thread before scheduling, including between RPCs
+        with mp. Returned requests must have KV in place and post-processing
+        queued on the current stream. Report each load at most once, never
+        again through `get_transfer_results()`. Failed receives stay on the
+        regular path.
+        """
+        return set()
+
+    def set_recv_done_notifier(self, notify: Callable[[], None]) -> bool:
+        """Worker side: have ``notify()`` called, from any thread, whenever a
+        receive completes, so a worker thread waiting on it can report the
+        receive at once instead of between RPCs.
+
+        Returns True if the connector does so and `has_pending_recving()` /
+        `poll_finished_recving()` may then run on that thread concurrently
+        with the other worker-side methods. A connector that never reports
+        receives early qualifies trivially.
+        """
+        return (
+            type(self).poll_finished_recving is KVConnectorBase_V1.poll_finished_recving
+        )
+
     def get_block_ids_with_load_errors(self) -> set[int]:
         """Get the set of block IDs that failed to load.
 
