@@ -3707,6 +3707,8 @@ class VllmConfig:
         kda_architectures = (
             "KimiLinearForCausalLM",
             "KimiK3ForConditionalGeneration",
+            "Glm5NextForCausalLM",
+            "Glm5NextForConditionalGeneration",
         )
         is_kda_model = (
             self.model_config is not None
