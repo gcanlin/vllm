@@ -50,12 +50,12 @@ class PrefillStepBudgetConfig:
     e: float = Field(default=6.83366, ge=0)
     """Cost per step (ms)."""
 
-    budget_ms: float = Field(default=float("inf"), gt=0)
-    """Cap on the predicted step time."""
+    budget_ms: float | None = Field(default=None, gt=0)
+    """Cap on the predicted step time; None for no cap."""
 
-    ctx_budget_ms: float = Field(default=float("inf"), gt=0)
+    ctx_budget_ms: float | None = Field(default=None, gt=0)
     """Cap on the predicted context-dependent time of a step (the `g*c` and
-    `b*q*c` terms)."""
+    `b*q*c` terms); None for no cap."""
 
     ctx_balance: tuple[float, float, float] | None = None
     """`[factor, floor_ms, cap_ms]`: instead of `ctx_budget_ms`, cap the

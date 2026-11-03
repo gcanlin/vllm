@@ -111,7 +111,8 @@ class PrefillStepBudget:
 
     def begin_step(self) -> None:
         cfg = self.config
-        self._cost_left = cfg.budget_ms - cfg.e
+        budget_ms = math.inf if cfg.budget_ms is None else cfg.budget_ms
+        self._cost_left = budget_ms - cfg.e
         if self._step_demands is not None:
             assert cfg.dp_budget is not None
             factor, floor_ms, cap_ms = cfg.dp_budget
@@ -126,7 +127,9 @@ class PrefillStepBudget:
             mean = float(demands.mean()) if demands.size else cap_ms
             self._ctx_left = min(cap_ms, max(floor_ms, factor * mean))
         else:
-            self._ctx_left = cfg.ctx_budget_ms
+            self._ctx_left = (
+                math.inf if cfg.ctx_budget_ms is None else cfg.ctx_budget_ms
+            )
         self._cost_start = self._cost_left
         self._ctx_start = self._ctx_left
         # Predicted time of the chunk parts that were cut off this step.
