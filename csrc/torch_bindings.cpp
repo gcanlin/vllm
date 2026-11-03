@@ -571,6 +571,27 @@ STABLE_TORCH_LIBRARY_FRAGMENT(_C, ops) {
       "Tensor? norm_weight=None, float norm_eps=1e-5) -> ()");
 #endif
 
+#ifdef VLLM_ENABLE_KDA_RECOVERSSM
+  // KDA RecoverSSM verify and commit for an FP32 state (SM10x).
+  ops.def(
+      "kda_recoverssm_verify("
+      "Tensor q, Tensor k, Tensor v, Tensor raw_g, Tensor raw_beta, "
+      "Tensor A_log, Tensor dt_bias, Tensor state, Tensor! correction, "
+      "Tensor! key_gate, Tensor! out, Tensor query_start_loc, "
+      "Tensor state_indices, float? lower_bound, int null_block_id, "
+      "int spec_query_len) -> ()");
+  ops.def(
+      "kda_recoverssm_commit("
+      "Tensor! state_ref, Tensor state_base_addrs, Tensor state_block_strides, "
+      "Tensor correction_ref, Tensor correction_base_addrs, "
+      "Tensor correction_row_strides, Tensor key_gate_ref, "
+      "Tensor key_gate_base_addrs, Tensor key_gate_row_strides, Tensor A_log, "
+      "Tensor dt_bias, Tensor state_indices, Tensor commit_lens, "
+      "Tensor final_state_indices, Tensor boundary_state_indices, "
+      "Tensor boundary_recovery_lens, float? lower_bound, int null_block_id, "
+      "int batch, bool align) -> ()");
+#endif
+
 #ifdef VLLM_ENABLE_FUSED_GDN_DECODE
   ops.def(
       "fused_gdn_decode_post_conv_mtp("
@@ -908,6 +929,10 @@ STABLE_TORCH_LIBRARY_IMPL(_C, CUDA, ops) {
            TORCH_BOX(&fused_minimax_m3_dspark_context_kv));
 #ifdef VLLM_ENABLE_FUSED_KDA_DECODE
   ops.impl("fused_kda_decode", TORCH_BOX(&fused_kda_decode));
+#endif
+#ifdef VLLM_ENABLE_KDA_RECOVERSSM
+  ops.impl("kda_recoverssm_verify", TORCH_BOX(&kda_recoverssm_verify));
+  ops.impl("kda_recoverssm_commit", TORCH_BOX(&kda_recoverssm_commit));
 #endif
 
 #ifdef VLLM_ENABLE_FUSED_GDN_DECODE

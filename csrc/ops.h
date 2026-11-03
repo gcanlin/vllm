@@ -440,6 +440,38 @@ void fused_kda_decode(
 
 #endif
 
+#ifdef VLLM_ENABLE_KDA_RECOVERSSM
+void kda_recoverssm_verify(
+    torch::stable::Tensor const& q, torch::stable::Tensor const& k,
+    torch::stable::Tensor const& v, torch::stable::Tensor const& raw_g,
+    torch::stable::Tensor const& raw_beta, torch::stable::Tensor const& a_log,
+    torch::stable::Tensor const& dt_bias, torch::stable::Tensor const& state,
+    torch::stable::Tensor& correction, torch::stable::Tensor& key_gate,
+    torch::stable::Tensor& out, torch::stable::Tensor const& query_start_loc,
+    torch::stable::Tensor const& state_indices,
+    std::optional<double> lower_bound, int64_t null_block_id,
+    int64_t spec_query_len);
+
+void kda_recoverssm_commit(torch::stable::Tensor& state_ref,
+                           torch::stable::Tensor const& state_base_addrs,
+                           torch::stable::Tensor const& state_block_strides,
+                           torch::stable::Tensor const& correction_ref,
+                           torch::stable::Tensor const& correction_base_addrs,
+                           torch::stable::Tensor const& correction_row_strides,
+                           torch::stable::Tensor const& key_gate_ref,
+                           torch::stable::Tensor const& key_gate_base_addrs,
+                           torch::stable::Tensor const& key_gate_row_strides,
+                           torch::stable::Tensor const& a_log,
+                           torch::stable::Tensor const& dt_bias,
+                           torch::stable::Tensor const& state_indices,
+                           torch::stable::Tensor const& commit_lens,
+                           torch::stable::Tensor const& final_state_indices,
+                           torch::stable::Tensor const& boundary_state_indices,
+                           torch::stable::Tensor const& boundary_recovery_lens,
+                           std::optional<double> lower_bound,
+                           int64_t null_block_id, int64_t batch, bool align);
+#endif
+
 #ifdef VLLM_ENABLE_FUSED_GDN_DECODE
 void fused_gdn_decode_post_conv_mtp(
     torch::stable::Tensor const& mixed_qkv, torch::stable::Tensor const& a,
