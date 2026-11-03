@@ -40,7 +40,7 @@ from vllm.multimodal.inputs import (
 )
 from vllm.platforms import current_platform
 from vllm.sampling_params import SamplingParams
-from vllm.utils.hashing import sha256, sha256_cbor, xxhash, xxhash_cbor
+from vllm.utils.hashing import sha256, sha256_cbor, sha256_int32, xxhash, xxhash_cbor
 from vllm.v1.core.kv_cache_manager import KVCacheBlocks, KVCacheManager
 from vllm.v1.core.kv_cache_planning import (
     get_kv_cache_groups,
@@ -1010,7 +1010,7 @@ def test_to_event_extra_keys_keeps_untagged_event_format():
     assert to_event_extra_keys(None) is None
 
 
-@pytest.mark.parametrize("hash_fn", [sha256, sha256_cbor])
+@pytest.mark.parametrize("hash_fn", [sha256, sha256_cbor, sha256_int32])
 def test_hash_block_tokens(hash_fn):
     parent_block_hash = BlockHash(b"123")
     curr_block_token_ids = (1, 2, 3)
@@ -1023,7 +1023,7 @@ def test_hash_block_tokens(hash_fn):
     assert block_hash == expected
 
 
-@pytest.mark.parametrize("hash_fn", [sha256, sha256_cbor])
+@pytest.mark.parametrize("hash_fn", [sha256, sha256_cbor, sha256_int32])
 def test_request_block_hasher(hash_fn):
     request = make_request(
         request_id="0",
@@ -1105,7 +1105,7 @@ def test_frontend_block_hashes_count_check():
     assert frontend_hashes(config, 3) is None
 
 
-@pytest.mark.parametrize("hash_fn", [sha256, sha256_cbor])
+@pytest.mark.parametrize("hash_fn", [sha256, sha256_cbor, sha256_int32])
 @pytest.mark.parametrize("lookahead", [False, True])
 def test_request_block_hasher_incremental_append_with_multiple_mm_features(
     hash_fn, lookahead
