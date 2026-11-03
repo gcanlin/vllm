@@ -12,6 +12,7 @@ from vllm.compilation.breakable_cudagraph import eager_break_during_capture
 from vllm.config import VllmConfig, get_current_vllm_config
 from vllm.distributed import divide
 from vllm.forward_context import get_forward_context
+from vllm.logger import init_logger
 from vllm.model_executor.layers.linear import (
     ColumnParallelLinear,
     MergedColumnParallelLinear,
@@ -63,6 +64,8 @@ else:
         chunk_kda_with_fused_gate,
         fused_recurrent_kda,
     )
+
+logger = init_logger(__name__)
 
 
 class _Glm5NextMergedColumnParallelLinear(MergedColumnParallelLinear):
@@ -363,12 +366,29 @@ class Glm5NextLinearAttention(GatedDeltaNetAttention):
         self.recoverssm_backend = None
         self.recoverssm_records = None
         if self.use_recoverssm:
-            from vllm.models.kimi_k3.nvidia.ops.recoverssm import KDARecoverSSMRecords
+            from vllm.models.kimi_k3.nvidia.ops.recoverssm import (
+                KDARecoverSSMRecords,
+                can_use_cuda_recoverssm,
+            )
 
             self.spec_query_len = 1 + self.num_spec
             # Read by Kimi-K3's commit context, which folds in the accepted tokens.
             self.gate_lower_bound = self.kda_lower_bound
-            self.recoverssm_backend = "triton"
+            supported, reason = can_use_cuda_recoverssm(
+                head_dim=self.head_dim,
+                window=self.spec_query_len,
+                activation_dtype=vllm_config.model_config.dtype,
+                state_dtype=self.get_state_dtype()[1],
+            )
+            self.recoverssm_backend = "cuda" if supported else "triton"
+            if supported:
+                logger.info_once("Using the CUDA KDA RecoverSSM verify and commit.")
+            else:
+                logger.info_once(
+                    "Using the Triton KDA RecoverSSM verify and commit: the CUDA "
+                    "kernels cannot run (%s).",
+                    reason,
+                )
             self.recoverssm_records = KDARecoverSSMRecords.allocate(
                 vllm_config.scheduler_config.max_num_seqs,
                 self.local_num_heads,
@@ -727,6 +747,7 @@ class Glm5NextLinearAttention(GatedDeltaNetAttention):
                     state_indices=spec_state_indices_tensor[:num_spec_decodes, 0],
                     spec_query_len=self.spec_query_len,
                     out=spec_out,
+                    backend=self.recoverssm_backend,
                 )
             else:
                 # Gate computed inside the recurrent kernel (COMPUTE_GATE) from

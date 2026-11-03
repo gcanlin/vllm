@@ -1221,6 +1221,22 @@ if(VLLM_GPU_LANG STREQUAL "CUDA" OR VLLM_GPU_LANG STREQUAL "HIP")
       "Building Kimi K3 AttnRes for archs: ${KIMI_K3_ATTN_RES_ARCHS}")
   endif()
 
+  # KDA RecoverSSM verify and commit for an FP32 SSM state: the packed FP32x2
+  # math of the SM10x family.
+  if(${CMAKE_CUDA_COMPILER_VERSION} VERSION_GREATER_EQUAL 13.0)
+    cuda_archs_loose_intersection(KDA_RECOVERSSM_ARCHS
+      "10.0f" "${CUDA_ARCHS}")
+  endif()
+  if(KDA_RECOVERSSM_ARCHS)
+    set(KDA_RECOVERSSM_SRC "csrc/kimi_k3/kda_recoverssm_kernel.cu")
+    set_gencode_flags_for_srcs(
+      SRCS "${KDA_RECOVERSSM_SRC}"
+      CUDA_ARCHS "${KDA_RECOVERSSM_ARCHS}")
+    list(APPEND VLLM_STABLE_EXT_SRC "${KDA_RECOVERSSM_SRC}")
+    message(STATUS
+      "Building KDA RecoverSSM for archs: ${KDA_RECOVERSSM_ARCHS}")
+  endif()
+
   # Hadacore kernels
   cuda_archs_loose_intersection(HADACORE_ARCHS "8.0+PTX;9.0+PTX" "${CUDA_ARCHS}")
   if(HADACORE_ARCHS)
@@ -1326,6 +1342,10 @@ if(VLLM_GPU_LANG STREQUAL "CUDA" OR VLLM_GPU_LANG STREQUAL "HIP")
     if(KIMI_K3_ATTN_RES_ARCHS)
       target_compile_definitions(_C_stable_libtorch PRIVATE
         VLLM_ENABLE_KIMI_K3_ATTN_RES=1)
+    endif()
+    if(KDA_RECOVERSSM_ARCHS)
+      target_compile_definitions(_C_stable_libtorch PRIVATE
+        VLLM_ENABLE_KDA_RECOVERSSM=1)
     endif()
     if(BEAM_KERNEL_ARCHS)
       target_compile_definitions(_C_stable_libtorch PRIVATE

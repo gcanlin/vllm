@@ -10,6 +10,7 @@ import torch
 
 from vllm.model_executor.layers.mamba.mamba_utils import is_conv_state_dim_first
 from vllm.models.kimi_k3.nvidia.recoverssm.kernels import cute_recoverssm_commit
+from vllm.platforms import current_platform
 from vllm.triton_utils import tl, triton
 from vllm.v1.attention.backends.utils import NULL_BLOCK_ID
 
@@ -612,6 +613,27 @@ class KDARecoverSSMRecords:
         )
 
 
+def can_use_cuda_recoverssm(
+    head_dim: int,
+    window: int,
+    activation_dtype: torch.dtype,
+    state_dtype: torch.dtype,
+) -> tuple[bool, str | None]:
+    """Whether the CUDA verify and commit (csrc/kimi_k3/kda_recoverssm_kernel.cu)
+    can run, and why not otherwise."""
+    if not (
+        current_platform.is_cuda()
+        and current_platform.is_device_capability_family(100)
+        and hasattr(torch.ops._C, "kda_recoverssm_verify")
+    ):
+        return False, "they need SM10x and a build that includes them"
+    if head_dim != 128 or window > 8:
+        return False, "they need head_dim 128 and at most 8 tokens per step"
+    if activation_dtype != torch.bfloat16 or state_dtype != torch.float32:
+        return False, "they need bfloat16 activations and a float32 SSM state"
+    return True, None
+
+
 def kda_recoverssm_verify(
     q: torch.Tensor,
     k: torch.Tensor,
@@ -627,6 +649,7 @@ def kda_recoverssm_verify(
     state_indices: torch.Tensor,
     spec_query_len: int,
     out: torch.Tensor | None = None,
+    backend: Literal["cuda", "triton"] = "triton",
 ) -> torch.Tensor:
     """Verify a KDA speculative window without modifying its checkpoint. Request
     ``b`` writes its verify records to row ``b`` of ``records``."""
@@ -686,6 +709,26 @@ def kda_recoverssm_verify(
     ):
         raise ValueError("KDA RecoverSSM inputs must be on the same device")
     if total_tokens == 0:
+        return out
+    if backend == "cuda":
+        torch.ops._C.kda_recoverssm_verify(
+            q,
+            k,
+            v,
+            raw_g,
+            raw_beta,
+            A_log,
+            dt_bias,
+            checkpoint_state,
+            correction_cache,
+            kg_cache,
+            out,
+            query_start_loc,
+            state_indices,
+            lower_bound,
+            NULL_BLOCK_ID,
+            spec_query_len,
+        )
         return out
 
     block_k = triton.next_power_of_2(key_dim)
@@ -765,8 +808,8 @@ class KDARecoverSSMCommitContext:
     lower_bound: float | None
     spec_query_len: int
     # The kernel folding the accepted tokens into the state (the commit plan
-    # and the conv state compaction are Triton for both).
-    backend: Literal["cute", "triton"] = "triton"
+    # and the conv state compaction are Triton for all).
+    backend: Literal["cute", "cuda", "triton"] = "triton"
 
     @classmethod
     def create(
@@ -775,7 +818,7 @@ class KDARecoverSSMCommitContext:
         *,
         spec_query_len: int,
         max_num_reqs: int,
-        backend: Literal["cute", "triton"] = "triton",
+        backend: Literal["cute", "cuda", "triton"] = "triton",
     ) -> "KDARecoverSSMCommitContext":
         if not layers:
             raise ValueError("KDA RecoverSSM commit requires at least one layer")
@@ -995,6 +1038,30 @@ class KDARecoverSSMCommitContext:
                 self, state_indices, batch, align=block_table is not None
             )
             return
+        if self.backend == "cuda":
+            torch.ops._C.kda_recoverssm_commit(
+                self.checkpoints[0],
+                self.state_base_addrs,
+                self.state_block_strides,
+                self.correction_caches[0],
+                self.correction_cache_base_addrs,
+                self.correction_cache_block_strides,
+                self.kg_caches[0],
+                self.kg_cache_base_addrs,
+                self.kg_cache_block_strides,
+                self.A_log,
+                self.dt_bias,
+                state_indices,
+                self.commit_lens,
+                self.final_state_indices,
+                self.boundary_state_indices,
+                self.boundary_recovery_lens,
+                self.lower_bound,
+                NULL_BLOCK_ID,
+                batch,
+                block_table is not None,
+            )
+            return
         state_ref = self.checkpoints[0]
         _, num_heads, value_dim, key_dim = state_ref.shape
         block_k = triton.next_power_of_2(key_dim)
@@ -1050,4 +1117,8 @@ class KDARecoverSSMCommitContext:
         )
 
 
-__all__ = ["KDARecoverSSMCommitContext", "kda_recoverssm_verify"]
+__all__ = [
+    "KDARecoverSSMCommitContext",
+    "can_use_cuda_recoverssm",
+    "kda_recoverssm_verify",
+]
