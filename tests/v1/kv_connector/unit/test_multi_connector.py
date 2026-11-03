@@ -11,6 +11,7 @@ import pytest
 import torch
 
 from tests.v1.kv_connector.unit.utils import (
+    create_request,
     create_vllm_config,
     maybe_update_block_size,
     set_mtp_config,
@@ -193,7 +194,7 @@ def test_register_finished_partial_tail_notifies_every_connector():
     first.register_finished_partial_tail.return_value = True
     second.register_finished_partial_tail.return_value = False
     connector._connectors = [first, second]
-    request = MagicMock()
+    request = create_request()
     block_ids = ([1], [2])
     offloads = [(1, 2, 12)]
 
@@ -237,7 +238,7 @@ def mc() -> MultiConnector:
 
 @pytest.mark.parametrize("chosen", [0, 1])
 def test_loaded_groups_follow_the_connector_serving_the_request(mc, chosen):
-    request = MagicMock(request_id="request")
+    request = create_request()
     for i, connector in enumerate(mc._connectors):
         connector.get_num_new_matched_tokens.return_value = (
             (16, True) if i == chosen else (0, False)
@@ -280,7 +281,7 @@ def test_multi_connector_rejects_multiple_mem_pool_contexts(mc: MultiConnector):
 
 
 def test_cache_hit_sources_delegate_to_selected_connector(mc: MultiConnector):
-    request = MagicMock(request_id="request")
+    request = create_request()
     mc._requests_to_connector[request.request_id] = 1
     sources = {CacheHitSource.DISK: 32}
     mc._connectors[1].get_external_cache_hit_sources.return_value = sources

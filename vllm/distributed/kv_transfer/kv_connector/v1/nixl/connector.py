@@ -204,6 +204,14 @@ class NixlBaseConnector(KVConnectorBase_V1, SupportsHMA):
         assert self.connector_scheduler is not None
         return self.connector_scheduler.build_connector_meta(scheduler_output)
 
+    def on_preschedule_request(self, request: "Request") -> None:
+        # Truncate the P-side prompt on the input thread, before a later
+        # MultiConnector child sizes work by it (e.g. a store lookup prefetch,
+        # which is discarded if the prompt length changes afterwards).
+        # on_new_request repeats this as a no-op.
+        assert self.connector_scheduler is not None
+        self.connector_scheduler.prepare_prefill_request(request)
+
     def on_new_request(self, request: "Request") -> None:
         assert self.connector_scheduler is not None
         self.connector_scheduler.on_new_request(request)
@@ -355,6 +363,16 @@ class NixlBaseConnector(KVConnectorBase_V1, SupportsHMA):
 
 class NixlPullConnector(NixlBaseConnector):
     """Pull-based (READ) NIXL KV transfer connector."""
+
+    def get_num_cached_tokens(
+        self, request: "Request", num_computed_tokens: int
+    ) -> int | None:
+        assert self.connector_scheduler is not None
+        # Pull admission computes this count solely from request metadata.
+        count, _ = self.connector_scheduler.get_num_new_matched_tokens(
+            request, num_computed_tokens
+        )
+        return num_computed_tokens + count if count > 0 else 0
 
     def __init__(
         self,

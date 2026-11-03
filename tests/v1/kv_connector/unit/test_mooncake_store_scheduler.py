@@ -48,6 +48,7 @@ def _make_bare_scheduler(
     scheduler.save_decode_cache = save_decode_cache
     scheduler.enable_kv_events = False
     scheduler.lookup_async = False
+    scheduler.client = _StubLookupClient(hit_tokens=0)
     scheduler.enable_lookup = True
     scheduler._capacity_only = False
     scheduler._block_size = 16
@@ -982,6 +983,12 @@ class _StubLookupClient:
         self._hit_tokens = hit_tokens
         self.num_tokens: list[int] = []
 
+    def discard(self, req_id):
+        pass
+
+    def adopt(self, req_id: str, state) -> None:
+        pass
+
     def lookup(
         self,
         req_id: str,
@@ -1002,6 +1009,7 @@ def test_full_external_hit_keeps_kvpool_cached_tokens_block_aligned():
 
     request = SimpleNamespace(
         request_id="req-0",
+        kv_preschedule_handle=None,
         num_tokens=48,
         block_hashes=[b"h0", b"h1", b"h2"],
     )
@@ -1032,6 +1040,7 @@ def test_full_external_hit_with_full_local_hit_skips_load():
 
     request = SimpleNamespace(
         request_id="req-0",
+        kv_preschedule_handle=None,
         num_tokens=48,
         block_hashes=[b"h0", b"h1", b"h2"],
     )
@@ -1054,6 +1063,7 @@ def test_partial_hash_hit_block_aligned_local_loads_partial_tail():
 
     request = SimpleNamespace(
         request_id="req-0",
+        kv_preschedule_handle=None,
         num_tokens=32,
         block_hashes=[b"h0", b"h1", b"h2", b"h3", b"h4", b"h5", b"h6", b"h7"],
     )
@@ -1079,6 +1089,7 @@ def test_partial_hash_hit_no_remote_gain_skips_load():
 
     request = SimpleNamespace(
         request_id="req-0",
+        kv_preschedule_handle=None,
         num_tokens=32,
         block_hashes=[b"h0", b"h1", b"h2", b"h3", b"h4", b"h5", b"h6", b"h7"],
     )
@@ -1103,6 +1114,7 @@ def test_sub_block_prompt_looks_up_with_fine_grained():
 
     request = SimpleNamespace(
         request_id="req-0",
+        kv_preschedule_handle=None,
         num_tokens=12,
         block_hashes=[b"h0", b"h1", b"h2"],
     )
@@ -1124,6 +1136,7 @@ def test_sub_block_prompt_not_looked_up_without_fine_grained():
 
     request = SimpleNamespace(
         request_id="req-0",
+        kv_preschedule_handle=None,
         num_tokens=12,
         block_hashes=[b"h0", b"h1", b"h2"],
     )
@@ -1147,6 +1160,7 @@ def test_disabled_lookup_reports_no_hit_without_querying_client():
 
     request = SimpleNamespace(
         request_id="req-0",
+        kv_preschedule_handle=None,
         num_tokens=48,
         block_hashes=[b"h0", b"h1", b"h2"],
     )

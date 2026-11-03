@@ -199,11 +199,16 @@ class NixlBaseConnectorScheduler:
             self._nixl_handshake_listener_t.join()
             self._nixl_handshake_listener_t = None
 
-    def on_new_request(self, request: "Request") -> None:
-        """Track a request that may need heartbeats."""
+    def prepare_prefill_request(self, request: "Request") -> None:
+        """Apply the P-side prompt truncation; idempotent."""
         params = request.kv_transfer_params
         if params is not None and params.get("do_remote_decode"):
             self._truncate_request_for_prefill(request)
+
+    def on_new_request(self, request: "Request") -> None:
+        """Track a request that may need heartbeats."""
+        self.prepare_prefill_request(request)
+        params = request.kv_transfer_params
 
         # NOTE (NickLucche) This excludes request meant for P, ie heartbeats are
         # effectively disabled for Bidirectional KV transfer.
