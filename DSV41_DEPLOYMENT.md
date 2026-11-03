@@ -215,7 +215,7 @@ curl http://$D_HOST:8100/v1/chat/completions -H 'Content-Type: application/json'
 
 | 指标 | 数值 |
 | --- | --- |
-| 每卡输出（16 卡） | 5,350 tok/s（总 85,598 tok/s） |
+| 每卡输出（16 卡） | 5,335 tok/s（总 85,363 tok/s） |
 | TTFT p50 / p90 / p99 | 0.64 / 1.61 / 9.71 s |
 | ITL p10 / p50 / p90 | 6.71 / 7.03 / 7.85 ms |
 | 每用户 tok/s p10 / p50 | 127 / 142 |
