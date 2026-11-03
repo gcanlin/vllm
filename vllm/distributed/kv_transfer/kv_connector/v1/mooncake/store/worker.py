@@ -1485,6 +1485,7 @@ class MooncakeStoreWorker:
 
     # Defaults for workers built without __init__ (unit tests).
     _recv_state_lock = threading.Lock()
+    _load_kick_path: str | None = None
     _load_kick_ctx: zmq.Context | None = None
 
     @staticmethod

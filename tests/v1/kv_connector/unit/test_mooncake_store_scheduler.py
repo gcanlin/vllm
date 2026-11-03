@@ -325,7 +325,9 @@ def test_scheduler_projects_nonprefix_groups_and_mamba_ids():
         num_hash_lookahead_tokens=0,
         speculative_config=None,
         kv_transfer_config=SimpleNamespace(
-            kv_role="kv_both", kv_connector_extra_config={}
+            kv_role="kv_both",
+            kv_connector_extra_config={},
+            enable_early_recv=False,
         ),
         kv_events_config=None,
         cache_config=SimpleNamespace(

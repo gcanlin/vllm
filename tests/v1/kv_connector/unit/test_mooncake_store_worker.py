@@ -4432,7 +4432,9 @@ def test_mooncake_lookup_reuses_resolved_hash_checkpoint(
         num_hash_lookahead_tokens=0,
         speculative_config=None,
         kv_transfer_config=SimpleNamespace(
-            kv_role="kv_both", kv_connector_extra_config={}
+            kv_role="kv_both",
+            kv_connector_extra_config={},
+            enable_early_recv=False,
         ),
         kv_events_config=None,
         cache_config=SimpleNamespace(
@@ -4506,7 +4508,9 @@ def test_scheduler_follows_core_hit_alignment(alignment, expected):
         num_hash_lookahead_tokens=0,
         speculative_config=None,
         kv_transfer_config=SimpleNamespace(
-            kv_role="kv_both", kv_connector_extra_config={}
+            kv_role="kv_both",
+            kv_connector_extra_config={},
+            enable_early_recv=False,
         ),
         kv_events_config=None,
         cache_config=SimpleNamespace(
