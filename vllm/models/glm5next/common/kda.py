@@ -368,7 +368,7 @@ class Glm5NextLinearAttention(GatedDeltaNetAttention):
             self.spec_query_len = 1 + self.num_spec
             # Read by Kimi-K3's commit context, which folds in the accepted tokens.
             self.gate_lower_bound = self.kda_lower_bound
-            self.recoverssm_backend = "triton"
+            self.recoverssm_backend = "cuda"
             self.recoverssm_records = KDARecoverSSMRecords.allocate(
                 vllm_config.scheduler_config.max_num_seqs,
                 self.local_num_heads,
@@ -706,7 +706,7 @@ class Glm5NextLinearAttention(GatedDeltaNetAttention):
             assert num_accepted_tokens is not None
             assert spec_query_start_loc is not None
             if self.use_recoverssm:
-                from vllm.models.kimi_k3.nvidia.ops.recoverssm import (
+                from vllm.models.kimi_k3.nvidia.ops.kda_recoverssm_cuda import (
                     kda_recoverssm_verify,
                 )
 

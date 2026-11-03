@@ -766,7 +766,7 @@ class KDARecoverSSMCommitContext:
     spec_query_len: int
     # The kernel folding the accepted tokens into the state (the commit plan
     # and the conv state compaction are Triton for both).
-    backend: Literal["cute", "triton"] = "triton"
+    backend: Literal["cute", "cuda", "triton"] = "triton"
 
     @classmethod
     def create(
@@ -775,7 +775,7 @@ class KDARecoverSSMCommitContext:
         *,
         spec_query_len: int,
         max_num_reqs: int,
-        backend: Literal["cute", "triton"] = "triton",
+        backend: Literal["cute", "cuda", "triton"] = "triton",
     ) -> "KDARecoverSSMCommitContext":
         if not layers:
             raise ValueError("KDA RecoverSSM commit requires at least one layer")
@@ -994,6 +994,13 @@ class KDARecoverSSMCommitContext:
             cute_recoverssm_commit(
                 self, state_indices, batch, align=block_table is not None
             )
+            return
+        if self.backend == "cuda":
+            from vllm.models.kimi_k3.nvidia.ops.kda_recoverssm_cuda import (
+                recoverssm_commit,
+            )
+
+            recoverssm_commit(self, state_indices, batch, align=block_table is not None)
             return
         state_ref = self.checkpoints[0]
         _, num_heads, value_dim, key_dim = state_ref.shape
