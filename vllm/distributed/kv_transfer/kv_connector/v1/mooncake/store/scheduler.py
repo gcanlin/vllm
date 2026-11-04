@@ -159,6 +159,11 @@ class MooncakeStoreScheduler:
         # Skips lookup CPU cost on instances that never load KV from the store.
         self.enable_lookup = kvc_extra_config.get("enable_lookup", True)
         self.save_decode_cache = kvc_extra_config.get("save_decode_cache", False)
+        # Store a prompt-end KDA snapshot only once the request has computed at
+        # least this many tokens past the prefix it was admitted with; the next
+        # turn otherwise resumes from that older snapshot. 0 stores every one.
+        self.min_tail_new_tokens = kvc_extra_config.get("min_tail_new_tokens", 0)
+        self._admit_hit_tokens: dict[str, int] = {}
         kv_event_config = vllm_config.kv_events_config
         self.enable_kv_events = bool(
             kv_event_config and kv_event_config.enable_kv_cache_events
@@ -376,6 +381,7 @@ class MooncakeStoreScheduler:
         for finished_req_id in scheduler_output.finished_req_ids:
             self.client.discard(finished_req_id)
             self.load_specs.pop(finished_req_id, None)
+            self._admit_hit_tokens.pop(finished_req_id, None)
             self._request_trackers.pop(finished_req_id, None)
             self._unfinished_requests.pop(finished_req_id, None)
             self._unfinished_request_ids.discard(finished_req_id)
@@ -395,6 +401,7 @@ class MooncakeStoreScheduler:
         # Handle new requests
         for request in scheduler_output.scheduled_new_reqs:
             load_spec = self.load_specs.pop(request.req_id, None)
+            self._admit_hit_tokens[request.req_id] = request.num_computed_tokens
             num_tokens_to_compute = (
                 request.num_computed_tokens
                 + scheduler_output.num_scheduled_tokens[request.req_id]
@@ -456,6 +463,7 @@ class MooncakeStoreScheduler:
                     load_spec = self.load_specs.pop(req_id, None)
                     request_tuple = self._unfinished_requests.get(req_id)
                     request_real = request_tuple[0]  # type: ignore[index]
+                    self._admit_hit_tokens[req_id] = request_real.num_computed_tokens
                     num_tokens_to_compute = (
                         request_real.num_computed_tokens
                         + scheduler_output.num_scheduled_tokens[req_id]
@@ -653,6 +661,21 @@ class MooncakeStoreScheduler:
             if req_meta.store_job_id is not None:
                 assert req_meta.store_job_id in self._pinned_saves
                 continue
+            prompt_tokens = req_meta.num_prompt_tokens
+            if (
+                req_meta.publish_partial_tail
+                and prompt_tokens is not None
+                and self._skips_prompt_snapshot(
+                    req_meta.req_id,
+                    get_mamba_prefill_checkpoint_position(
+                        prompt_tokens,
+                        coord.hash_block_size,
+                        coord.use_eagle,
+                        coord.num_hash_lookahead_tokens,
+                    ),
+                )
+            ):
+                req_meta.publish_partial_tail = False
             if tail := _partial_tail_non_mamba_puts(coord, req_meta, block_sizes):
                 req_meta.boundary_puts = [*tail, *(req_meta.boundary_puts or [])]
             if self.enable_kv_events and coord.num_hash_lookahead_tokens:
@@ -750,6 +773,8 @@ class MooncakeStoreScheduler:
         boundary_tokens = next(iter(boundaries))
         if boundary_tokens > tracker.prefill_end_tokens:
             return False
+        if self._skips_prompt_snapshot(request.request_id, boundary_tokens):
+            return False
 
         mamba_puts: list[BoundaryPut] = []
         for group_id, block_id, boundary in partial_tail_offloads:
@@ -802,6 +827,15 @@ class MooncakeStoreScheduler:
         # The store job owns exact block refs, so request cleanup need not wait.
         return False
 
+    def _skips_prompt_snapshot(self, req_id: str, boundary_tokens: int) -> bool:
+        """Whether a prompt-end (block-unaligned) KDA snapshot sits fewer than
+        ``min_tail_new_tokens`` tokens after the request's admitted prefix."""
+        return (
+            boundary_tokens % self._block_size != 0
+            and boundary_tokens - self._admit_hit_tokens.get(req_id, 0)
+            < self.min_tail_new_tokens
+        )
+
     def _handle_boundary_state_offloads(
         self,
         offloads: dict[str, list[tuple[int, int, int]]],
@@ -830,6 +864,10 @@ class MooncakeStoreScheduler:
                 if is_decode_boundary and not self.save_decode_cache:
                     continue
                 if not is_decode_boundary and self.kv_role == "kv_consumer":
+                    continue
+                if not is_decode_boundary and self._skips_prompt_snapshot(
+                    req_id, boundary_tokens
+                ):
                     continue
                 if block_id == NULL_BLOCK_ID:
                     continue
