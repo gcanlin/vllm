@@ -796,6 +796,9 @@ class MooncakeStoreScheduler:
             prefill_end_tokens=tracker.prefill_end_tokens,
             boundary_puts=mamba_puts,
             completed_token_len=request.num_computed_tokens,
+            superseded_boundary=self._superseded_boundary(
+                request.request_id, boundary_tokens
+            ),
         )
         coord = self._store_coord
         assert coord is not None
@@ -835,6 +838,23 @@ class MooncakeStoreScheduler:
             and boundary_tokens - self._admit_hit_tokens.get(req_id, 0)
             < self.min_tail_new_tokens
         )
+
+    def _superseded_boundary(self, req_id: str, boundary_tokens: int) -> int | None:
+        """The prompt-end checkpoint a request was admitted at, if storing its
+        own prompt-end checkpoint at ``boundary_tokens`` supersedes it.
+
+        Only a prompt-end checkpoint supersedes: it is stored with the attention
+        tail that lets the next turn resume from it. Block-aligned states are
+        never removed, since other prompts branch from them.
+        """
+        admitted = self._admit_hit_tokens.get(req_id, 0)
+        if (
+            boundary_tokens % self._block_size == 0
+            or admitted % self._block_size == 0
+            or admitted >= boundary_tokens
+        ):
+            return None
+        return admitted
 
     def _handle_boundary_state_offloads(
         self,
@@ -878,8 +898,18 @@ class MooncakeStoreScheduler:
             if not accepted:
                 continue
             tracker.has_pending_offload = True
+            superseded = next(
+                (
+                    boundary
+                    for put in accepted
+                    if put.num_tokens <= tracker.prefill_end_tokens
+                    and (boundary := self._superseded_boundary(req_id, put.num_tokens))
+                ),
+                None,
+            )
             if (req_meta := save_metas.get(req_id)) is not None:
                 req_meta.boundary_puts = accepted
+                req_meta.superseded_boundary = superseded
                 continue
             meta.add_request(
                 ReqMeta(
@@ -892,6 +922,7 @@ class MooncakeStoreScheduler:
                     prefill_end_tokens=tracker.prefill_end_tokens,
                     boundary_puts=accepted,
                     completed_token_len=tracker.token_len,
+                    superseded_boundary=superseded,
                 )
             )
 

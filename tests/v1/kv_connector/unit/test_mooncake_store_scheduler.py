@@ -63,6 +63,8 @@ def _make_bare_scheduler(
     scheduler._request_trackers = {}
     scheduler._finished_partial_tail_metas = {}
     scheduler._finished_lookahead_metas = {}
+    scheduler._admit_hit_tokens = {}
+    scheduler.min_tail_new_tokens = 0
     scheduler._gpu_block_pool = BlockPool(
         num_gpu_blocks=64, enable_caching=True, hash_block_size=hash_block_size
     )
@@ -1628,6 +1630,32 @@ def test_resumed_prefill_claims_boundaries_past_prompt_length():
     assert meta.requests[0].boundary_puts == [(1, 7, 16), (1, 9, 32)]
     store_job_id = meta.requests[0].store_job_id
     assert scheduler._pinned_saves[store_job_id][0] == [7, 9]
+
+
+@pytest.mark.parametrize(
+    ("admitted", "min_tail_new_tokens", "superseded"),
+    [
+        # Admitted at the previous turn's prompt-end checkpoint.
+        (20, 0, 20),
+        # Admitted at a block-aligned state, which other prompts branch from.
+        (16, 0, None),
+        # This turn's prompt-end checkpoint is skipped: the admitted one stays
+        # the newest of the conversation.
+        (20, 32, None),
+    ],
+)
+def test_prompt_end_checkpoint_supersedes_the_admitted_one(
+    admitted, min_tail_new_tokens, superseded
+):
+    scheduler = _make_bare_scheduler(hash_block_size=4, enable_partial_hash_hits=True)
+    scheduler._admit_hit_tokens["req-0"] = admitted
+    scheduler.min_tail_new_tokens = min_tail_new_tokens
+    _register_offload_request(scheduler, prefill_end_tokens=37, num_prompt_tokens=37)
+    out = _make_offload_only_output([(1, 9, 32), (1, 11, 36)])
+
+    meta = scheduler.build_connector_meta(out)
+
+    assert meta.requests[0].superseded_boundary == superseded
 
 
 def test_boundary_state_job_pins_exact_blocks_once():

@@ -310,6 +310,9 @@ class ReqMeta:
     # Set on the save that first covers the whole prompt, so the scheduler
     # publishes the prompt's partial tail once rather than on every save.
     publish_partial_tail: bool = False
+    # The prompt-end checkpoint the request was admitted at, superseded by the
+    # one this job stores. The worker removes its Mamba states afterwards.
+    superseded_boundary: int | None = None
 
     @staticmethod
     def from_request_tracker(
