@@ -776,6 +776,51 @@ def test_async_loads_both_admitted_when_pool_fits():
         assert req.status == RequestStatus.WAITING_FOR_REMOTE_KVS
 
 
+@pytest.mark.parametrize("kv_load_ahead", [0, 2])
+def test_kv_load_ahead_starts_loads_past_a_full_budget(kv_load_ahead):
+    """Once the token budget is spent, kv_load_ahead keeps scanning the waiting
+    queue to start async loads. A request that needs compute keeps its place
+    and is not deferred, and the scan stops after kv_load_ahead requests."""
+    vllm_config = create_vllm_config(max_num_batched_tokens=64)
+    vllm_config.scheduler_config.kv_load_ahead = kv_load_ahead
+    BLOCK_SIZE = vllm_config.cache_config.block_size
+    scheduler = create_scheduler(vllm_config)
+
+    # req_a fills the token budget, req_b needs compute, req_c and req_d hit.
+    req_a, req_b = (
+        create_request(request_id=i, block_size=BLOCK_SIZE, num_tokens=64)
+        for i in (1, 2)
+    )
+    req_c, req_d = (
+        create_request(
+            request_id=i,
+            block_size=BLOCK_SIZE,
+            num_tokens=BLOCK_SIZE * 4,
+            do_remote_prefill=True,
+        )
+        for i in (3, 4)
+    )
+    for req in (req_a, req_b, req_c, req_d):
+        scheduler.add_request(req)
+
+    def lookup(request, num_computed_tokens):
+        return (BLOCK_SIZE, True) if request in (req_c, req_d) else (0, False)
+
+    with patch.object(
+        scheduler.connector, "get_num_new_matched_tokens", side_effect=lookup
+    ):
+        scheduler_output = scheduler.schedule()
+
+    assert scheduler_output.num_scheduled_tokens == {req_a.request_id: 64}
+    if kv_load_ahead:
+        assert req_c.status == RequestStatus.WAITING_FOR_REMOTE_KVS
+        assert list(scheduler.waiting) == [req_b, req_d]
+    else:
+        assert list(scheduler.waiting) == [req_b, req_c, req_d]
+    assert req_d.status == RequestStatus.WAITING
+    assert req_b not in scheduler.deferred_waiting
+
+
 @pytest.mark.parametrize(
     ("swa_enabled", "block_size", "num_spec_tokens", "num_blocks"),
     [(False, 16, 3, 8), (True, 16, 3, 17), (True, 64, 31, 40)],

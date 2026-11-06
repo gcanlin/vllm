@@ -303,6 +303,14 @@ class SchedulerConfig:
     already-admitted prompt, so a long prompt can take up to N times as many
     steps to finish prefilling."""
 
+    kv_load_ahead: int = Field(default=0, ge=0)
+    """Start async KV connector loads for waiting requests that a step has no
+    room to compute, so a load overlaps the request's queueing instead of
+    starting once the request reaches the head of the queue. Each step examines
+    up to this many more waiting requests, and starts loads only while fewer
+    than this many waiting requests hold loaded or loading KV. 0 (the default)
+    disables it."""
+
     async_scheduling: bool | None = None
     """If set to False, disable async scheduling. Async scheduling helps to
     avoid gaps in GPU utilization, leading to better latency and throughput.
