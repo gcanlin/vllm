@@ -202,6 +202,10 @@ class Scheduler(SchedulerInterface):
             )
 
             self.requires_kv_delivery = self.connector.requires_kv_delivery
+        # Only a KV connector loads asynchronously.
+        self.kv_load_ahead = (
+            self.scheduler_config.kv_load_ahead if self.connector is not None else 0
+        )
 
         self.kv_event_publisher = EventPublisherFactory.create(
             self.kv_events_config,
@@ -1098,19 +1102,41 @@ class Scheduler(SchedulerInterface):
                 else:
                     step_skipped_waiting.appendleft(request_to_skip)
 
-            while token_budget > 0:
-                # Requests holding KV blocks are always drained first, and are
-                # the only ones admitted under PAUSED_NEW (e.g. async KV loads).
-                request_queue = self.kv_holding_waiting
-                if not request_queue and self._pause_state == PauseState.UNPAUSED:
-                    request_queue = self.waiting
-                if not request_queue or input_budget <= draft_slots:
-                    break
+            # Once this step has no room for more compute, keep walking the
+            # waiting queue only to start async KV loads (kv_load_ahead).
+            loads_only = False
+            num_load_ahead_scans = 0
+            while True:
                 # Paused streaming sessions (WAITING_FOR_STREAMING_REQ) are not
                 # in `running` but still hold a model-runner request slot.
                 num_running = len(self.running) + self.num_waiting_for_streaming_input
-                if num_running >= self.max_num_active_reqs:
-                    break
+                loads_only = loads_only or (
+                    token_budget <= 0
+                    or input_budget <= draft_slots
+                    or num_running >= self.max_num_active_reqs
+                )
+                if loads_only:
+                    num_kv_holding = len(self.kv_holding_waiting) + len(
+                        step_skipped_kv_holding
+                    )
+                    if (
+                        num_load_ahead_scans == self.kv_load_ahead
+                        or num_kv_holding >= self.kv_load_ahead
+                        or not self.waiting
+                        or self._pause_state != PauseState.UNPAUSED
+                    ):
+                        break
+                    num_load_ahead_scans += 1
+                    request_queue = self.waiting
+                else:
+                    # Requests holding KV blocks are always drained first, and
+                    # are the only ones admitted under PAUSED_NEW (e.g. async
+                    # KV loads).
+                    request_queue = self.kv_holding_waiting
+                    if not request_queue and self._pause_state == PauseState.UNPAUSED:
+                        request_queue = self.waiting
+                    if not request_queue:
+                        break
 
                 request = request_queue.peek_request()
                 request_id = request.request_id
@@ -1311,6 +1337,12 @@ class Scheduler(SchedulerInterface):
                     if self._ec_transfer_pending(request, num_computed_tokens):
                         skip_request(request_queue)
                         continue
+
+                if loads_only and not load_kv_async:
+                    # Needs compute this step has no room for. Unlike
+                    # skip_request, it is not deferred.
+                    step_skipped_waiting.appendleft(request_queue.pop_request())
+                    continue
 
                 encoder_inputs_to_schedule = None
                 external_load_encoder_input = []
