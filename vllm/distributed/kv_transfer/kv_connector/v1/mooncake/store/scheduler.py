@@ -727,7 +727,9 @@ class MooncakeStoreScheduler:
             prefill_end_tokens=tracker.prefill_end_tokens,
             boundary_puts=mamba_puts,
             completed_token_len=request.num_computed_tokens,
-            superseded_boundary=self._superseded_boundary(tracker, boundary_tokens),
+            superseded_boundary=self._superseded_boundary(
+                tracker, request.num_prompt_tokens, boundary_tokens
+            ),
         )
         coord = self._store_coord
         assert coord is not None
@@ -760,19 +762,21 @@ class MooncakeStoreScheduler:
         return False
 
     def _superseded_boundary(
-        self, tracker: RequestTracker, boundary_tokens: int
+        self, tracker: RequestTracker, num_prompt_tokens: int, boundary_tokens: int
     ) -> int | None:
         """The prompt-end checkpoint a request was admitted at, if storing its
         own prompt-end checkpoint at ``boundary_tokens`` supersedes it.
 
         Only a prompt-end checkpoint supersedes: it is stored with the attention
-        tail that lets the next turn resume from it. Block-aligned states are
-        never removed, since other prompts branch from them.
+        tail that lets the next turn resume from it. A request resumed after
+        preemption re-prefills past its prompt, and a state there is not one the
+        next turn resumes from. Block-aligned states are never removed, since
+        other prompts branch from them.
         """
         admitted = tracker.admitted_tokens
         if (
             not self.remove_superseded_checkpoints
-            or boundary_tokens > tracker.prefill_end_tokens
+            or boundary_tokens > num_prompt_tokens
             or boundary_tokens % self._block_size == 0
             or admitted % self._block_size == 0
             or admitted >= boundary_tokens
@@ -822,7 +826,9 @@ class MooncakeStoreScheduler:
                 filter(
                     None,
                     (
-                        self._superseded_boundary(tracker, put.num_tokens)
+                        self._superseded_boundary(
+                            tracker, req_tuple[0].num_prompt_tokens, put.num_tokens
+                        )
                         for put in accepted
                     ),
                 ),

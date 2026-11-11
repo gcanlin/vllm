@@ -1711,6 +1711,19 @@ def test_prompt_end_checkpoint_supersedes_the_admitted_one(
     assert meta.requests[0].superseded_boundary == superseded
 
 
+def test_resumed_request_supersedes_nothing_past_its_prompt():
+    scheduler = _make_bare_scheduler(hash_block_size=4, enable_partial_hash_hits=True)
+    scheduler.remove_superseded_checkpoints = True
+    # Resumed after preemption: it re-prefills its 37-token prompt and 8 outputs.
+    _register_offload_request(scheduler, prefill_end_tokens=45, num_prompt_tokens=37)
+    scheduler._request_trackers["req-0"].admitted_tokens = 20
+    out = _make_offload_only_output([(1, 11, 44)])
+
+    meta = scheduler.build_connector_meta(out)
+
+    assert meta.requests[0].superseded_boundary is None
+
+
 def test_boundary_state_job_pins_exact_blocks_once():
     scheduler = _make_bare_scheduler(hash_block_size=4, enable_partial_hash_hits=True)
     _register_offload_request(scheduler, prefill_end_tokens=64, num_prompt_tokens=64)
