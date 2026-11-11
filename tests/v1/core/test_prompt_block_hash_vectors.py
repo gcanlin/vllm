@@ -27,7 +27,7 @@ import regex as re
 import vllm.v1.core.kv_cache_utils as kv_cache_utils
 from vllm.lora.request import LoRARequest
 from vllm.sampling_params import SamplingParams
-from vllm.utils.hashing import sha256, sha256_cbor
+from vllm.utils.hashing import sha256, sha256_cbor, sha256_int32
 from vllm.v1.core.kv_cache_utils import get_request_block_hasher, init_none_hash
 from vllm.v1.request import Request
 
@@ -47,6 +47,7 @@ VECTORS = (
 HASH_FNS: dict[str, Callable[[Any], bytes]] = {
     "sha256": sha256,
     "sha256_cbor": sha256_cbor,
+    "sha256_int32": sha256_int32,
 }
 
 # Token ids at every encoding-width boundary of both the pickle and CBOR

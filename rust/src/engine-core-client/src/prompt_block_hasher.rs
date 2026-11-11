@@ -12,7 +12,7 @@
 //! - `hash_block_tokens`, `generate_block_hash_extra_keys` and
 //!   `get_request_block_hasher`:
 //!   <https://github.com/vllm-project/vllm/blob/main/vllm/v1/core/kv_cache_utils.py>
-//! - `sha256` and `sha256_cbor`:
+//! - `sha256`, `sha256_cbor` and `sha256_int32`:
 //!   <https://github.com/vllm-project/vllm/blob/main/vllm/utils/hashing.py>
 
 use sha2::{Digest, Sha256};
@@ -32,6 +32,10 @@ enum KeyEncoding {
     Pickle,
     /// `sha256_cbor`: `cbor2.dumps(key, canonical=True)`.
     Cbor,
+    /// `sha256_int32`: the parent hash, the token count as a little-endian
+    /// u64, the tokens as native int32 and, unless they are `None`,
+    /// `pickle.dumps(extra_keys, protocol=5)`.
+    Int32,
 }
 
 /// A Python value in a block's extra keys, limited to the kinds this frontend
@@ -88,6 +92,7 @@ impl PromptBlockHasher {
         let encoding = match config.hash_algo.as_str() {
             "sha256" => KeyEncoding::Pickle,
             "sha256_cbor" => KeyEncoding::Cbor,
+            "sha256_int32" => KeyEncoding::Int32,
             _ => return None,
         };
         let block_size = usize::try_from(config.hash_block_size).ok()?;
@@ -121,7 +126,7 @@ impl PromptBlockHasher {
         let strings = (lora.into_iter())
             .flat_map(|lora| [lora.lora_name.as_str(), lora.lora_path.as_str()])
             .chain(cache_salt);
-        if self.encoding == KeyEncoding::Pickle && may_share_pickled_objects(strings) {
+        if self.encoding != KeyEncoding::Cbor && may_share_pickled_objects(strings) {
             return None;
         }
         let keys = RequestExtraKeys {
@@ -169,6 +174,9 @@ impl PromptBlockHasher {
                     KeyEncoding::Cbor => {
                         encode_cbor_key(&mut key, &parent, &token_ids[start..end], &extra_keys)
                     }
+                    KeyEncoding::Int32 => {
+                        encode_int32_key(&mut key, &parent, &token_ids[start..end], &extra_keys)?
+                    }
                 }
                 parent = Sha256::digest(&key).to_vec();
                 Some(BlockHash(parent.clone()))
@@ -207,23 +215,57 @@ fn encode_pickle_key(
     block: &[u32],
     extra_keys: &ExtraKey<'_>,
 ) -> Option<()> {
+    write_pickle(out, |out| {
+        // SHORT_BINBYTES parent.
+        out.push(b'C');
+        out.push(u8::try_from(parent.len()).ok()?);
+        out.extend_from_slice(parent);
+        out.push(MEMOIZE);
+        write_pickle_tuple(out, block.len(), |out| {
+            block.iter().try_for_each(|&token| write_pickle_int(out, token))
+        })?;
+        write_pickle_value(out, extra_keys)?;
+        // TUPLE3 for the key itself.
+        out.extend_from_slice(&[0x87, MEMOIZE]);
+        Some(())
+    })
+}
+
+/// Write what `sha256_int32` hashes for a block.
+fn encode_int32_key(
+    out: &mut Vec<u8>,
+    parent: &[u8],
+    block: &[u32],
+    extra_keys: &ExtraKey<'_>,
+) -> Option<()> {
+    out.extend_from_slice(parent);
+    out.extend_from_slice(&(block.len() as u64).to_le_bytes());
+    for &token in block {
+        // `array("i")` holds signed C ints.
+        out.extend_from_slice(&i32::try_from(token).ok()?.to_ne_bytes());
+    }
+    if *extra_keys != ExtraKey::None {
+        write_pickle(out, |out| write_pickle_value(out, extra_keys))?;
+    }
+    Some(())
+}
+
+/// Write one protocol-5 pickle whose object `write_object` writes, framed as
+/// CPython's C pickler frames it.
+fn write_pickle(
+    out: &mut Vec<u8>,
+    write_object: impl FnOnce(&mut Vec<u8>) -> Option<()>,
+) -> Option<()> {
     // PROTO 5, then FRAME with the length of everything after it.
     out.extend_from_slice(&[0x80, 0x05, 0x95]);
     let frame_len_at = out.len();
     out.extend_from_slice(&[0; 8]);
-    // SHORT_BINBYTES parent.
-    out.push(b'C');
-    out.push(u8::try_from(parent.len()).ok()?);
-    out.extend_from_slice(parent);
-    out.push(MEMOIZE);
-    write_pickle_tuple(out, block.len(), |out| {
-        block.iter().try_for_each(|&token| write_pickle_int(out, token))
-    })?;
-    write_pickle_value(out, extra_keys)?;
-    // TUPLE3 for the key itself, then STOP.
-    out.extend_from_slice(&[0x87, MEMOIZE, b'.']);
+    write_object(out)?;
+    // STOP.
+    out.push(b'.');
     let frame_len = out.len() - frame_len_at - 8;
-    if frame_len >= PICKLE_FRAME_SIZE_TARGET {
+    // The pickler drops the FRAME opcode of a frame under 4 bytes.
+    if !(4..PICKLE_FRAME_SIZE_TARGET).contains(&frame_len) {
         return None;
     }
     out[frame_len_at..frame_len_at + 8].copy_from_slice(&(frame_len as u64).to_le_bytes());
@@ -364,8 +406,9 @@ mod tests {
         "9bd96a485ad84efdafb72ee48a1d7a69bcead0f8f0433173941b276b9581eef0";
 
     fn hasher(hash_algo: &str, block_size: u64, lookahead: u64) -> PromptBlockHasher {
+        // `sha256_int32` hashes the NONE_HASH seed as `sha256` does.
         let none_hash = match hash_algo {
-            "sha256" => SHA256_NONE_HASH,
+            "sha256" | "sha256_int32" => SHA256_NONE_HASH,
             _ => SHA256_CBOR_NONE_HASH,
         };
         PromptBlockHasher::new(&PrefixHashConfig {
@@ -426,13 +469,14 @@ mod tests {
 
     /// Plain, LoRA, cache-salt and lookahead requests at several block sizes,
     /// against `Request.block_hashes` from the real `get_request_block_hasher`
-    /// with `sha256` and `sha256_cbor`.
+    /// with `sha256`, `sha256_cbor` and `sha256_int32`.
     #[test]
     fn prompt_block_hashes_match_python_engine() {
         let vectors: Vectors = serde_json::from_str(PYTHON_VECTORS).unwrap();
         // The vectors chain from the engine's default-seed `NONE_HASH`.
         assert_eq!(vectors.none_hashes["sha256"], SHA256_NONE_HASH);
         assert_eq!(vectors.none_hashes["sha256_cbor"], SHA256_CBOR_NONE_HASH);
+        assert_eq!(vectors.none_hashes["sha256_int32"], SHA256_NONE_HASH);
         assert!(!vectors.cases.is_empty());
         for case in vectors.cases {
             let request = EngineCoreRequest {
@@ -472,6 +516,10 @@ mod tests {
             hasher("sha256", 2, 0).hash_request(&request(tokens.clone())),
             None
         );
+        assert_eq!(
+            hasher("sha256_int32", 2, 0).hash_request(&request(tokens.clone())),
+            None
+        );
         // CBOR encodes every u32 directly.
         assert!(hasher("sha256_cbor", 2, 0).hash_request(&request(tokens)).is_some());
     }
@@ -483,7 +531,13 @@ mod tests {
             hasher("sha256", 16 * 1024, 0).hash_request(&request(tokens.clone())),
             None
         );
-        assert!(hasher("sha256_cbor", 16 * 1024, 0).hash_request(&request(tokens)).is_some());
+        assert!(
+            hasher("sha256_cbor", 16 * 1024, 0)
+                .hash_request(&request(tokens.clone()))
+                .is_some()
+        );
+        // `sha256_int32` pickles only the extra keys.
+        assert!(hasher("sha256_int32", 16 * 1024, 0).hash_request(&request(tokens)).is_some());
     }
 
     #[test]
