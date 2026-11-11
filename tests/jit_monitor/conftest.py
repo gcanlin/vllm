@@ -22,6 +22,7 @@ def _reset_monitor():
         jit_monitor._flydsl_hook_installed = False
         jit_monitor._tilelang_hook_installed = False
         jit_monitor._tilelang_jitimpl_compile_depth = 0
+        jit_monitor._compile_counts.clear()
 
     reset()
     yield
