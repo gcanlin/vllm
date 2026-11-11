@@ -263,23 +263,28 @@ class Glm5NextVisionBlock(nn.Module):
     def forward(
         self,
         x: torch.Tensor,
+        residual: torch.Tensor | None,
         cu_seqlens: torch.Tensor,
         rotary_pos_emb_cos_sin: torch.Tensor,
         rotary_positions: torch.Tensor,
         max_seqlen: int | None = None,
         sequence_lengths: torch.Tensor | None = None,  # Only used for FlashInfer
-    ) -> torch.Tensor:
-        x_attn = self.attn(
-            self.norm1(x),
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        if residual is None:
+            residual = x
+            x = self.norm1(x)
+        else:
+            x, residual = self.norm1(x, residual)
+        x = self.attn(
+            x,
             cu_seqlens=cu_seqlens,
             rotary_pos_emb_cos_sin=rotary_pos_emb_cos_sin,
             rotary_positions=rotary_positions,
             max_seqlen=max_seqlen,
             sequence_lengths=sequence_lengths,
         )
-        x_fused_norm, residual = self.norm2(x, residual=x_attn)
-        x = residual + self.mlp(x_fused_norm)
-        return x
+        x, residual = self.norm2(x, residual)
+        return self.mlp(x), residual
 
 
 class Glm5NextPatchMerger(nn.Module):
@@ -572,9 +577,11 @@ class Glm5NextVisionTransformer(nn.Module):
 
         # transformers
         x = x.unsqueeze(1)
+        residual = None
         for blk in self.blocks:
-            x = blk(
+            x, residual = blk(
                 x,
+                residual,
                 cu_seqlens=encoder_metadata["cu_seqlens"],
                 rotary_pos_emb_cos_sin=rotary_pos_emb_cos_sin,
                 rotary_positions=rotary_positions,
@@ -583,7 +590,7 @@ class Glm5NextVisionTransformer(nn.Module):
             )
 
         # adapter
-        x = self.post_layernorm(x)
+        x, _ = self.post_layernorm(x, residual)
         x = x.view(-1, self.spatial_merge_size, self.spatial_merge_size, x.shape[-1])
         x = x.permute(0, 3, 1, 2)
         x = self.downsample(x).view(-1, self.out_hidden_size)
