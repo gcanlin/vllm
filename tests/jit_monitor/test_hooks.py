@@ -329,6 +329,22 @@ def test_cutedsl_compile_logs_verbose_warning():
     assert "CuTeDSL JIT compilation during inference" in msg
 
 
+def test_repeated_compilation_is_logged_at_powers_of_two():
+    """A kernel that compiles every step must not hide behind its first warning."""
+    with _patch_jit_modules(_make_fake_knobs(), cute_compile=_fake_cute_compile):
+        import cutlass.cute as cute
+
+        def kernel():
+            pass
+
+        jit_monitor.activate()
+        with mock.patch.object(jit_monitor.logger, "warning_once") as warning_once:
+            for _ in range(5):
+                cute.compile(kernel)
+
+    assert [call[0][4] for call in warning_once.call_args_list] == [1, 2, 4]
+
+
 def test_cutedsl_error_mode_raises():
     with _patch_jit_modules(_make_fake_knobs(), cute_compile=_fake_cute_compile):
         import cutlass.cute as cute

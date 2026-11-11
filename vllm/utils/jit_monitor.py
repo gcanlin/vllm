@@ -25,6 +25,7 @@ import contextlib
 import functools
 import importlib
 import os
+from collections import Counter
 from collections.abc import Iterator, Mapping
 from contextlib import suppress
 from typing import Any, Literal, cast
@@ -43,6 +44,7 @@ _cutedsl_hook_installed: bool = False
 _flydsl_hook_installed: bool = False
 _tilelang_hook_installed: bool = False
 _tilelang_jitimpl_compile_depth: int = 0
+_compile_counts: Counter[tuple[str, str, str]] = Counter()
 
 
 def is_active() -> bool:
@@ -126,12 +128,15 @@ def _handle_jit_event(
     detail: str | None = None,
 ) -> None:
     message = (
-        "%s %s during inference: %s%s. "
+        "%s %s during inference: %s (runtime compilation %d of this kernel)%s. "
         "This causes a latency spike; consider extending warmup "
         "to cover this shape/config."
     )
     detail_suffix = f" ({detail})" if detail else ""
-    args = (backend, event, fn_name, detail_suffix)
+    key = (backend, fn_name, detail_suffix)
+    _compile_counts[key] += 1
+    count = _compile_counts[key]
+    args = (backend, event, fn_name, count, detail_suffix)
 
     if _mode == "error":
         raise RuntimeError(message % args)
@@ -140,7 +145,10 @@ def _handle_jit_event(
         logger.warning(message, *args)
         return
 
-    logger.warning_once(message, *args)
+    # A kernel that keeps compiling (a shape or layout that changes every step)
+    # is logged at its 1st, 2nd, 4th, 8th, ... compilation.
+    if count & (count - 1) == 0:
+        logger.warning_once(message, *args)
 
 
 def _safe_repr(value: object, *, max_len: int = 120) -> str:
