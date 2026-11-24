@@ -2,13 +2,13 @@
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """Qwen4Exp routed experts on DeepGEMM MegaMoE.
 
-Routed experts stored as MXFP8, MXFP4 or BF16 load straight into the kernel
-layout. `--quantization` / `--quantization-config` can force another MegaMoE
-format, and the experts are then requantized as they load. Block-FP8 experts,
-which MegaMoE cannot run, are requantized to MXFP8 unless a format is forced.
-The MTP drafter's config does not carry the online config, so its experts
-take the default format. The sigmoid-gated shared expert stays unfused and runs
-on an aux stream next to the router.
+Routed experts load in the checkpoint's format (BF16, 128x128 block-FP8, MXFP8
+or MXFP4); block-FP8 experts run as stored on SM90 and as MXFP8 on SM100.
+`--quantization` / `--quantization-config` can force MXFP8 or MXFP4, and the
+experts are then requantized as they load. The MTP drafter's config does not
+carry the online config, so its experts take the default format. The
+sigmoid-gated shared expert stays unfused and runs on an aux stream next to the
+router.
 """
 
 from collections.abc import Iterable
@@ -22,12 +22,10 @@ from vllm.distributed import get_ep_group, get_tensor_model_parallel_world_size
 from vllm.logger import init_logger
 from vllm.model_executor.layers.fused_moe import RoutedExperts
 from vllm.model_executor.layers.fused_moe.deep_gemm_mega_moe import (
-    MEGA_MOE_MXFP4,
-    MEGA_MOE_MXFP8,
-    MEGA_MOE_WEIGHT_FORMATS,
     DeepGemmMegaMoEExperts,
     MegaMoEActivation,
     MegaMoEWeightFormat,
+    mega_moe_weight_format,
 )
 from vllm.model_executor.layers.fused_moe.router.fused_topk_router import fused_topk
 from vllm.model_executor.layers.fused_moe.router.gate_linear import GateLinear
@@ -69,7 +67,7 @@ _SHARD_TENSORS = {
     "mxfp8": ("weight", "weight_scale"),
     "mxfp4": ("weight", "weight_scale"),
 }
-_ONLINE_FORMATS = {kMxfp8Static: MEGA_MOE_MXFP8, kMxfp4Static: MEGA_MOE_MXFP4}
+_ONLINE_FORMATS = {kMxfp8Static: "mxfp8", kMxfp4Static: "mxfp4"}
 
 
 def _requantize(
@@ -97,7 +95,7 @@ def _requantize(
     deep_gemm = _import_deep_gemm()
     cast = (
         deep_gemm.per_token_cast_to_fp4
-        if weight_format.name == MEGA_MOE_MXFP4.name
+        if weight_format.name == "mxfp4"
         else deep_gemm.per_token_cast_to_fp8
     )
     values, sf = cast(x, use_ue8m0=True, gran_k=32)
@@ -144,7 +142,7 @@ def mega_moe_expert_formats(
     """The checkpoint format of the routed experts and the format they run in.
 
     A format forced through the online quantization config wins. Otherwise the
-    experts run as stored, and block-FP8 experts are requantized to MXFP8.
+    experts run in the checkpoint format.
     """
     quant_config = vllm_config.quant_config
     checkpoint_format = _checkpoint_expert_format(quant_config, prefix)
@@ -159,29 +157,21 @@ def mega_moe_expert_formats(
         is not None
     ):
         source, quant_key_str, target_pattern, spec, _ = resolved
-        weight_format = _ONLINE_FORMATS.get(spec.weight) if spec.weight else None
-        if weight_format is None:
+        online_format = _ONLINE_FORMATS.get(spec.weight) if spec.weight else None
+        if online_format is None:
             raise NotImplementedError(
                 f"Qwen4Exp MegaMoE runs routed experts as mxfp8 or mxfp4; "
                 f"quantization_config asks for {quant_key_str} at {prefix}."
             )
-        if weight_format.name != checkpoint_format:
+        if online_format != checkpoint_format:
             # Counted in the online quantization summary like a requantized layer.
             online_config.quantized_layers[prefix] = (
                 source.value,
                 quant_key_str,
                 target_pattern,
             )
-        return checkpoint_format, weight_format
-    if checkpoint_format == "fp8_block":
-        logger.warning_once(
-            "DeepGEMM MegaMoE cannot run the 128x128 block-FP8 routed experts of "
-            "this checkpoint, so they are requantized to MXFP8 at load time. Pass "
-            '--quantization-config \'{"moe": "mxfp8"}\' (or "mxfp4") to choose '
-            "the format explicitly."
-        )
-        return checkpoint_format, MEGA_MOE_MXFP8
-    return checkpoint_format, MEGA_MOE_WEIGHT_FORMATS[checkpoint_format]
+        return checkpoint_format, mega_moe_weight_format(online_format)
+    return checkpoint_format, mega_moe_weight_format(checkpoint_format)
 
 
 class _CheckLoaded(QuantizeMethodBase):
@@ -274,8 +264,7 @@ class Qwen4ExpMegaMoEExperts(DeepGemmMegaMoEExperts):
         """Write or requantize one checkpoint tensor; return the parameters
         written, so the loader still flags a parameter nothing reached."""
         if self.checkpoint_format == self.weight_format.name:
-            suffix = "weight" if kind == "weight" else "weight_scale"
-            return {self._write(expert_id, shard_id, suffix, tensor)}
+            return {self._write(expert_id, shard_id, kind, tensor)}
         pending = self.pending_shards.setdefault((expert_id, shard_id), {})
         pending[kind] = tensor
         if len(pending) < len(self._shard_tensors):

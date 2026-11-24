@@ -10,10 +10,12 @@ import torch
 from vllm.config.quantization import QuantizationConfigArgs
 from vllm.model_executor.layers.fused_moe.deep_gemm_mega_moe import (
     MEGA_MOE_BF16,
+    MEGA_MOE_FP8_BLOCK,
     MEGA_MOE_MXFP4,
     MEGA_MOE_MXFP8,
     DeepGemmMegaMoEExperts,
     MegaMoEActivation,
+    mega_moe_weight_format,
 )
 from vllm.model_executor.layers.quantization.fp8 import Fp8Config
 from vllm.model_executor.layers.quantization.modelopt import ModelOptMxFp8Config
@@ -29,6 +31,7 @@ from vllm.models.qwen4_exp.nvidia.mega_moe import (
     Qwen4ExpMegaMoEExperts,
     mega_moe_expert_formats,
 )
+from vllm.platforms import current_platform
 from vllm.utils.deep_gemm import is_deep_gemm_supported
 
 HIDDEN, INTER = 512, 256
@@ -125,12 +128,14 @@ def _expected(checkpoint_format, fmt, ckpt, num_local, start, num_logical):
             weight, sf = CASTS[fmt.name](x, use_ue8m0=True, gran_k=32)
             scale = (sf.view(torch.int32) >> 23).to(torch.uint8)
         prefix = "w2" if proj == "down_proj" else "w13"
-        for suffix, value in (("weight", weight), ("weight_scale", scale)):
+        scale_suffix = "weight_scale_inv" if fmt.stages_block_scales else "weight_scale"
+        for suffix, value in (("weight", weight), (scale_suffix, scale)):
             if value is not None:
                 name = f"{prefix}_{suffix}"
                 expected.weight_loader(
                     getattr(expected, name), value, name, shard_ids[proj], e
                 )
+    expected.process_weights_after_loading()
     return expected
 
 
@@ -155,17 +160,20 @@ def _with_online(config, **online) -> SimpleNamespace:
     return SimpleNamespace(quant_config=config)
 
 
-def test_expert_formats_follow_checkpoint_and_quantization_config():
+def test_expert_formats_follow_checkpoint_and_quantization_config(monkeypatch):
+    monkeypatch.setattr(
+        current_platform, "is_device_capability", lambda *args, **kwargs: False
+    )
     prefix, other = "model.layers.3.mlp.experts", "model.layers.47.mlp.experts"
     fp8 = Fp8Config(weight_block_size=[128, 128])
-    # Block FP8 has no MegaMoE kernel: MXFP8 unless a format is forced.
+    # Block FP8 runs as stored (as MXFP8 on SM100) unless a format is forced.
     assert mega_moe_expert_formats(SimpleNamespace(quant_config=fp8), prefix) == (
         "fp8_block",
-        MEGA_MOE_MXFP8,
+        MEGA_MOE_FP8_BLOCK,
     )
     config = _with_online(fp8, moe="mxfp4", ignore=["*.layers.47.*"])
     assert mega_moe_expert_formats(config, prefix)[1] is MEGA_MOE_MXFP4
-    assert mega_moe_expert_formats(config, other)[1] is MEGA_MOE_MXFP8
+    assert mega_moe_expert_formats(config, other)[1] is MEGA_MOE_FP8_BLOCK
     # Only the forced layer shows in the online quantization summary.
     assert list(config.quant_config.online_quantization_config.quantized_layers) == [
         prefix
@@ -174,7 +182,7 @@ def test_expert_formats_follow_checkpoint_and_quantization_config():
         Fp8Config(weight_block_size=[128, 128]), targets={prefix: "mxfp4"}
     )
     assert mega_moe_expert_formats(config, prefix)[1] is MEGA_MOE_MXFP4
-    assert mega_moe_expert_formats(config, other)[1] is MEGA_MOE_MXFP8
+    assert mega_moe_expert_formats(config, other)[1] is MEGA_MOE_FP8_BLOCK
     config = _with_online(Fp8Config(weight_block_size=[128, 128]), moe="mxfp8")
     assert mega_moe_expert_formats(config, prefix) == ("fp8_block", MEGA_MOE_MXFP8)
 
@@ -200,6 +208,8 @@ def test_expert_formats_follow_checkpoint_and_quantization_config():
 @pytest.mark.parametrize(
     "checkpoint_format,fmt",
     [
+        # This GPU's block-FP8 row: as stored on SM90, as MXFP8 on SM100.
+        ("fp8_block", mega_moe_weight_format("fp8_block")),
         ("fp8_block", MEGA_MOE_MXFP8),
         ("mxfp8", MEGA_MOE_MXFP8),
         ("mxfp4", MEGA_MOE_MXFP4),
@@ -233,8 +243,12 @@ def test_experts_load_checkpoint_into_kernel_layout(
     # EP rank 1 of 2 owns logical experts 2 and 3.
     experts = _experts(Qwen4ExpMegaMoEExperts, fmt, 2, 2, 4, checkpoint_format)
     loaded = experts.load_weights(names)
-    assert loaded == {n for n, _ in experts.named_parameters()}
+    # Every parameter but the block-FP8 kernel scales, derived after loading.
+    assert loaded == {
+        n for n, p in experts.named_parameters() if getattr(p, "weight_loader_numel", 1)
+    }
     experts.quant_method.process_weights_after_loading(experts)
+    experts.process_weights_after_loading()
     _assert_same_experts(experts, _expected(checkpoint_format, fmt, ckpt, 2, 2, 4))
 
 
