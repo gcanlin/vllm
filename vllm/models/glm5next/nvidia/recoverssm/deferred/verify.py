@@ -73,29 +73,29 @@ def _kernel(heads, max_requests, requests, tokens, conv_state, qkv):
         and tc_smem <= fused_tc.SMEM_LIMIT
     ):
         return KdaFusedTC(heads, tokens, 0, False, dim_first, window, sms, max_requests)
-    ctas = -(-items // max(2, -(-items // sms)))
     if streams and items >= WS_MIN_ITEMS:
         smem = partial(fused_ws.shared_bytes, tokens, tokens, dim_first, window, size)
         stage_fb = smem(True) <= fused_ws.SMEM_LIMIT
         if stage_fb or smem() <= fused_ws.SMEM_LIMIT:
-            return KdaFusedWS(
-                heads, tokens, 0, False, dim_first, window, ctas, stage_fb
-            )
+            return KdaFusedWS(heads, tokens, 0, False, dim_first, window, sms, stage_fb)
     split = next(s for limit, s in FUSED_SPLIT if items < limit)
     return KdaFused(heads, tokens, 0, False, split)
 
 
 # The operands whose leading dimension follows the batch (or the cache's slots).
 _BATCH_OPERANDS = frozenset((0, 3, 4, 5, 8, 9, 10, 11, 14, 15, 16, 17, 18))
-# Compiled kernels by layer shape and operand layouts, shared by every layer.
+# qkv, f_a and beta: views of the merged projection in pure verify steps, gathered
+# rows in mixed steps.
+_PROJECTION_OPERANDS = frozenset((0, 4, 5))
+# Compiled kernels by kernel configuration and operand layouts, shared by every layer.
 _COMPILED: dict[tuple, Callable[..., None]] = {}
 
 
 class KdaDeferredVerify:
     """The deferred RecoverSSM verify of one KDA layer shape (heads, window) for
-    steps of up to `max_requests` requests. KdaFusedTC compiles once per operand
-    layout with the batch read at run time; the fallbacks compile per batch. The
-    layers of one shape share the compiled kernels."""
+    steps of up to `max_requests` requests. The kernels read the batch and the
+    projection's row stride at run time, so each kernel configuration compiles
+    once and the layers of one shape share it."""
 
     def __init__(self, num_heads: int, window: int, max_requests: int) -> None:
         self.num_heads, self.window = num_heads, window
@@ -150,18 +150,20 @@ class KdaDeferredVerify:
             self.num_heads, self.max_requests, requests, self.window, conv_state, qkv
         )
         specs = list(map(layout, operands))
-        if isinstance(kernel, KdaFusedTC):
-            for i in _BATCH_OPERANDS:
-                shape, stride, dtype = specs[i]
-                specs[i] = ((None, *shape[1:]), stride, dtype)
-        # TC reads the batch at run time: q and max_requests are not in its layouts.
-        key = (self.num_heads, self.window, self.max_requests, type(kernel), *specs)
+        for i in _BATCH_OPERANDS:
+            shape, stride, dtype = specs[i]
+            if i in _PROJECTION_OPERANDS:
+                stride = (None, *stride[1:])
+            specs[i] = ((None, *shape[1:]), stride, dtype)
+        key = (type(kernel), *vars(kernel).values(), *specs)
         compiled = _COMPILED.get(key)
         if compiled is None:
             fakes = []
             for shape, stride, dtype in specs:
                 if shape[0] is None:
                     shape = (cute.sym_int(), *shape[1:])
+                if stride[0] is None:
+                    stride = (cute.sym_int(), *stride[1:])
                 fakes.append(fake(shape, stride, dtype))
             with torch.accelerator.device_index(qkv.device.index):
                 compiled = cute.compile(
