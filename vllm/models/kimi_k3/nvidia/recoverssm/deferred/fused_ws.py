@@ -69,7 +69,7 @@ FB_ROWS = K // 2  # F_B rows of the second gate pass, staged with stage_fb
 FB_PITCH = K + 8  # their row pitch (BF16): conflict-free fragment loads
 COPY_BYTES = 16384
 SMEM_LIMIT = 227 * 1024
-META = 8  # live, request, head, token, n, record slot, state slot
+META = 8  # live, request, head, token, n, record slot, state slot, qlen
 
 
 def load_shared_f32x4(pointer):
@@ -138,11 +138,15 @@ class KdaFusedWS:
     # ---------------------------------------------------------------- helpers
     @cute.jit
     def item_info(self, args, item):
-        """(head, request, state slot, record slot, pending n, window offset)."""
-        slots, record_rows, pending = args[8], args[20], args[21]
+        """(head, request, state slot, record slot, pending n, window offset,
+        bos, qlen)."""
+        slots, record_rows, pending, qsl = args[8], args[20], args[21], args[22]
+        T: cutlass.Constexpr = self.tokens
         RQ: cutlass.Constexpr = args[18].shape[2]
         head, request = item % self.heads, item // self.heads
         slot = Int32(slots[request, 0])
+        bos = Int32(qsl[request])
+        qlen = cutlass.min(cutlass.max(Int32(qsl[request + 1]) - bos, 0), T)
         rec = Int32(record_rows[request])
         n = Int32(0)
         if rec >= 0:
@@ -154,7 +158,7 @@ class KdaFusedWS:
         offset = Int32(0)
         if n > 0:
             offset = n - 1
-        return head, request, slot, rec, n, offset
+        return head, request, slot, rec, n, offset, bos, qlen
 
     @cute.jit
     def stage_conv(self, args, convs, p, head, conv_slot, offset):
@@ -180,21 +184,21 @@ class KdaFusedWS:
                         copy_g2s(at(convs, part, tap * K + per * p), source)
 
     @cute.jit
-    def stage_rows(self, args, xs, gs, fas, p, head, request):
+    def stage_rows(self, args, xs, gs, fas, p, head, bos, qlen):
         x, f_a, gate = args[0], args[4], args[11]
         T: cutlass.Constexpr = self.tokens
         dim: cutlass.Constexpr = self.heads * K
-        token = request * T
         k, kind = p % 16, p // 16
         if kind < 5:
             for t in cutlass.range_constexpr(T):
+                row = bos + cutlass.min(t, qlen - 1)
                 if kind < 3:
-                    source = at(x, token + t, kind * dim + head * K + 8 * k)
+                    source = at(x, row, kind * dim + head * K + 8 * k)
                     copy_g2s(at(xs, t, kind, 8 * k), source)
                 elif kind == 3:
-                    copy_g2s(at(gs, t, 8 * k), at(gate, token + t, head * K + 8 * k))
+                    copy_g2s(at(gs, t, 8 * k), at(gate, row, head * K + 8 * k))
                 else:
-                    copy_g2s(at(fas, t, 8 * k), at(f_a, token + t, 8 * k))
+                    copy_g2s(at(fas, t, 8 * k), at(f_a, row, 8 * k))
 
     @cute.jit
     def stage_records(self, args, kgs, us, p, head, rec):
@@ -224,10 +228,10 @@ class KdaFusedWS:
     @cute.jit
     def stage(self, args, staging, p, item):
         convs, xs, gs, fas, _, _, kgs, us, fbm = staging
-        head, request, slot, rec, n, offset = self.item_info(args, item)
-        if slot > 0:
+        head, request, slot, rec, n, offset, bos, qlen = self.item_info(args, item)
+        if (slot > 0) & (qlen > 0):
             self.stage_conv(args, convs, p, head, slot, offset)
-            self.stage_rows(args, xs, gs, fas, p, head, request)
+            self.stage_rows(args, xs, gs, fas, p, head, bos, qlen)
             if rec >= 0:
                 self.stage_records(args, kgs, us, p, head, rec)
             if cutlass.const_expr(self.stage_fb):
@@ -258,14 +262,14 @@ class KdaFusedWS:
     # ----------------------------------------------------------------- kernel
     @cute.kernel
     def kernel(self, args):
-        conv_state, output, corrections = args[3], args[10], args[18]
+        conv_state, corrections = args[3], args[18]
         T: cutlass.Constexpr = self.tokens
         H: cutlass.Constexpr = self.heads
         RQ: cutlass.Constexpr = corrections.shape[2]
         P2: cutlass.Constexpr = 1 << (pair_count(T) - 1).bit_length()
         tid, _, _ = cute.arch.thread_idx()
         cta, _, _ = cute.arch.block_idx()
-        requests: cutlass.Constexpr = output.shape[0] // T
+        requests: cutlass.Constexpr = args[8].shape[0]
         total_items: cutlass.Constexpr = H * requests
         # CTA c walks items c, c + ctas, ... (strided: CTAs running side by side
         # take neighbouring items, so different heads and state pages, instead of
@@ -345,7 +349,9 @@ class KdaFusedWS:
     def load_page(self, args, page, item, state_full):
         head, request = item % self.heads, item // self.heads
         slot = args[8][request, 0]
-        if slot > 0:
+        qsl = args[22]
+        qlen = Int32(qsl[request + 1]) - Int32(qsl[request])
+        if (slot > 0) & (qlen > 0):
             cute.arch.mbarrier_arrive_and_expect_tx(state_full, PAGE_BYTES)
             source = args[9][Int64(slot), None, None, None]
             for i in cutlass.range_constexpr(PAGE_BYTES // COPY_BYTES):
@@ -392,7 +398,7 @@ class KdaFusedWS:
             wait(ops_full + b, (j // 4) % 2, scope="cta")
             if meta[b, 0] != 0:
                 head, token, n = meta[b, 2], meta[b, 3], meta[b, 4]
-                rec, slot = meta[b, 5], meta[b, 6]
+                rec, slot, qlen = meta[b, 5], meta[b, 6], meta[b, 7]
                 destination = state[Int64(slot), None, None, None]
                 # Replay: S_n = S_0 D_n + sum_t u_t (kn_t P_t), stored when n > 0.
                 u = cute.make_rmem_tensor((ROWS, RQ), Float32)
@@ -481,9 +487,9 @@ class KdaFusedWS:
                         for s in cutlass.range_constexpr(t + 1):
                             o = fma(pr_s[b, b_index(T, t, s)], us_new[s], o)
                         xv_s[b, t, t_g] = Float32(BFloat16(o))
-                        if rec >= 0:
+                        if (rec >= 0) & (t < qlen):
                             corrections[rec, head, t, t_g] = us_new[t]
-                self.epilogue(args, t_g, j, b, head, token, xv_s, g_s,
+                self.epilogue(args, t_g, j, b, head, token, qlen, xv_s, g_s,
                               out_sums[j % 2, None, None], nw)  # fmt: skip
             cute.arch.mbarrier_arrive(done + b)
 
@@ -517,14 +523,15 @@ class KdaFusedWS:
 
         for j in cutlass.range(w, count, 2, unroll=1):
             item = first + j * stride
-            head, request, slot, rec, n, offset = self.item_info(args, item)
-            token = request * T
+            head, request, slot, rec, n, offset, token, qlen = self.item_info(
+                args, item
+            )
             blk = 2 * w + (j // 2) % 2
             cute.arch.cp_async_wait_group(0)
             sync_threads(bar, PREP_THREADS)
             if j >= 4:
                 wait(done + blk, ((j - 4) // 4) % 2, scope="cta")
-            if slot > 0:
+            if (slot > 0) & (qlen > 0):
                 wr = cute.make_rmem_tensor((8, 4), Uint32)
                 for chunk in cutlass.range_constexpr(8):
                     feature = head * K + 32 * warp + group_id
@@ -534,7 +541,7 @@ class KdaFusedWS:
                     wr[chunk, 0], wr[chunk, 2] = low
                     wr[chunk, 1], wr[chunk, 3] = high
                 beta_value = Float32(0)
-                if p < T:
+                if p < qlen:
                     beta_value = Float32(beta[token + p, head])
                 a = triton_exp(Float32(a_log[head]))
 
@@ -565,12 +572,14 @@ class KdaFusedWS:
                         convs[part, row] = conv_type(taps[1])
                         convs[part, row + 1] = conv_type(taps[2])
                         for t in cutlass.range_constexpr(T):
-                            convs[part, row + 2 + t] = conv_type(inputs[t])
+                            if t < qlen:
+                                convs[part, row + 2 + t] = conv_type(inputs[t])
                     else:
                         conv_page[channel, 0] = conv_type(taps[1])
                         conv_page[channel, 1] = conv_type(taps[2])
                         for t in cutlass.range_constexpr(T):
-                            conv_page[channel, 2 + t] = conv_type(inputs[t])
+                            if t < qlen:
+                                conv_page[channel, 2 + t] = conv_type(inputs[t])
                 if cutlass.const_expr(self.conv_dim_first):
                     fence_async_shared()
                 for t in cutlass.range_constexpr(T):
@@ -591,7 +600,8 @@ class KdaFusedWS:
                     u_s[blk, t, c] = u_old
                 if rec >= 0:
                     for t in cutlass.range_constexpr(T):
-                        key_gates[rec, head, t, c] = BFloat16(values[1, t])
+                        if t < qlen:
+                            key_gates[rec, head, t, c] = BFloat16(values[1, t])
 
                 # q, k and old key norms (one reduction).
                 squares = [Float32(0) for _ in range(NS)]
@@ -643,7 +653,7 @@ class KdaFusedWS:
                             xv_s[blk, t, feature] = self.decay(
                                 a, raw_g, dt, lower_bound
                             )
-                            if rec >= 0:
+                            if (rec >= 0) & (t < qlen):
                                 key_gates[rec, head, t, K + feature] = BFloat16(raw_g)
                 if p < T:
                     beta_s[blk, p] = triton_sigmoid(beta_value)
@@ -721,11 +731,13 @@ class KdaFusedWS:
                     meta[blk, 4] = n
                     meta[blk, 5] = rec
                     meta[blk, 6] = slot
+                    meta[blk, 7] = qlen
             else:
                 if p == 0:
                     meta[blk, 0] = 0
                 for t in cutlass.range_constexpr(T):
-                    output[token + t, head * K + c] = BFloat16(0)
+                    if t < qlen:
+                        output[token + t, head * K + c] = BFloat16(0)
             cute.arch.mbarrier_arrive(ops_full + blk)
 
             if cutlass.const_expr(self.conv_dim_first):  # noqa: SIM102
@@ -737,7 +749,7 @@ class KdaFusedWS:
             cute.arch.cp_async_commit_group()
 
     @cute.jit
-    def epilogue(self, args, t_g, j, b, head, token, o_s, g_s, out_sums, nw):
+    def epilogue(self, args, t_g, j, b, head, token, qlen, o_s, g_s, out_sums, nw):
         output, eps = args[10], args[15]
         T: cutlass.Constexpr = self.tokens
         lane, warp = t_g % 32, t_g // 32
@@ -757,4 +769,5 @@ class KdaFusedWS:
                 rstd = reciprocal(sqrt_approx(variance))
                 sigmoid_gate = triton_sigmoid(Float32(g_s[b, t, c]))
                 result = o_s[b, t, c] * rstd * nw * sigmoid_gate
-                output[token + t, head * K + c] = BFloat16(result)
+                if t < qlen:
+                    output[token + t, head * K + c] = BFloat16(result)

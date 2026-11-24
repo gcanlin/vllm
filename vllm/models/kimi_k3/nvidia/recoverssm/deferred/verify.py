@@ -48,24 +48,62 @@ def decode_conv_weight(weight: torch.Tensor) -> torch.Tensor:
     return weight.detach().view(3, -1, width).transpose(1, 2).contiguous()
 
 
-def _kernel(heads, max_requests, requests, tokens, conv_state, qkv):
-    """KdaFusedTC where its operands stream in (16-byte aligned rows, a conv window
-    of at least q + 2) and fit shared memory at `max_requests` requests (any
-    batch up to that), else KdaFusedWS from WS_MIN_ITEMS items, else KdaFused."""
+def _aligned_nd(tensor: torch.Tensor, align: int) -> bool:
+    return (
+        tensor.data_ptr() % align == 0
+        and all((s * tensor.element_size()) % align == 0 for s in tensor.stride()[:-1])
+        and tensor.stride(-1) == 1
+    )
+
+
+def _kernel(
+    heads, max_requests, requests, tokens, conv_state, qkv,
+    f_a, gate, state, f_b_weight, correction, key_gate,
+):  # fmt: skip
+    """KdaFusedTC where its operands stream in (16-byte aligned, contiguous
+    state heads/rows, a conv window of at least q + 2) and fit shared memory
+    at `max_requests` requests (any batch up to that), else KdaFusedWS from
+    WS_MIN_ITEMS items, else KdaFused (raising if even KdaFused's vector
+    alignments are violated)."""
+    if not _aligned_nd(state, 16):
+        raise ValueError(
+            "KdaDeferredVerify: state requires 16-byte aligned base, slot/head/row "
+            f"strides, and stride(-1) == 1 (got stride={state.stride()})"
+        )
+    if not _aligned_nd(f_a, 8) or not _aligned_nd(f_b_weight, 8):
+        raise ValueError(
+            "KdaDeferredVerify: f_a and f_b_weight require 8-byte alignment and "
+            "contiguous last dimension"
+        )
     items = heads * requests
     shape, stride = conv_state.shape, conv_state.stride()
     window = shape[-1]
     dim_first = stride[-1] == 1
     size = conv_state.element_size()
-    aligned = (stride[0] * size) % 16 == 0 and (qkv.stride(0) * 2) % 16 == 0
-    if not dim_first:
-        aligned = aligned and (stride[-1] * size) % 16 == 0
-    streams = aligned and window >= tokens + 2 and tokens >= 3
+    conv_aligned = (
+        conv_state.data_ptr() % 16 == 0
+        and (stride[0] * size) % 16 == 0
+        and (
+            stride[1:] == (window, 1)
+            if dim_first
+            else stride[1] == 1 and (stride[2] * size) % 16 == 0
+        )
+    )
+    aligned_16 = (
+        conv_aligned
+        and state.stride()[2:] == (K, 1)
+        and all(
+            _aligned_nd(t, 16)
+            for t in (qkv, f_a, gate, f_b_weight, correction, key_gate)
+        )
+    )
+    streams = aligned_16 and window >= tokens + 2 and tokens >= 3
     sms = torch.cuda.get_device_properties(qkv.device).multi_processor_count
     tc_items = fused_tc.cta_items(heads, max_requests, sms)
     tc_smem = fused_tc.shared_bytes(tokens, tokens, dim_first, window, size, tc_items)
     if (
         streams
+        and state.stride(1) == K * K
         and window == tokens + 2
         and 2 * tokens <= fused_tc.PROBES
         and tc_smem <= fused_tc.SMEM_LIMIT
@@ -83,17 +121,30 @@ def _kernel(heads, max_requests, requests, tokens, conv_state, qkv):
     return KdaFused(heads, tokens, 0, False, split)
 
 
+# Operands whose leading dimension is total tokens (dynamic for all kernels).
+_TOKEN_OPERANDS = frozenset((0, 4, 5, 10, 11))
 # The operands whose leading dimension follows the batch (or the cache's slots).
-_BATCH_OPERANDS = frozenset((0, 3, 4, 5, 8, 9, 10, 11, 14, 15, 16, 17, 18))
+_BATCH_OPERANDS = frozenset((0, 3, 4, 5, 8, 9, 10, 11, 14, 15, 16, 17, 18, 19))
+# Operands whose leading row stride is read dynamically by KdaFusedTC.
+_STRIDE_OPERANDS = frozenset((0, 3, 4, 5, 8, 9, 10, 11))
+# Operands accessed only by scalar loads/stores (need only element alignment).
+_SCALAR_OPERANDS = frozenset((1, 2, 5, 6, 7, 8, 10, 12, 14, 17, 18, 19))
 # Compiled kernels by layer shape and operand layouts, shared by every layer.
 _COMPILED: dict[tuple, Callable[..., None]] = {}
+
+
+def _operand_align(kernel: object, idx: int, elem_size: int) -> int:
+    if isinstance(kernel, (KdaFusedTC, KdaFusedWS)):
+        return elem_size if idx in _SCALAR_OPERANDS else 16
+    return 16 if idx == 9 else 8 if idx in (4, 13) else elem_size
 
 
 class KdaDeferredVerify:
     """The deferred RecoverSSM verify of one KDA layer shape (heads, window) for
     steps of up to `max_requests` requests. KdaFusedTC compiles once per operand
-    layout with the batch read at run time; the fallbacks compile per batch. The
-    layers of one shape share the compiled kernels."""
+    layout with the batch and leading row strides read at run time; the
+    fallbacks compile per batch. The layers of one shape share the compiled
+    kernels."""
 
     def __init__(self, num_heads: int, window: int, max_requests: int) -> None:
         self.num_heads, self.window = num_heads, window
@@ -121,35 +172,44 @@ class KdaDeferredVerify:
         key_gate: torch.Tensor,
         record_rows: torch.Tensor,
         pending: torch.Tensor,
+        query_start_loc: torch.Tensor,
         out: torch.Tensor,
     ) -> torch.Tensor:
-        """One verify step of `B = state_indices.shape[0]` requests of `q`
-        tokens each. `qkv` [B q, 3 H K] is the projection before the conv,
-        `gate` [B q, H K] the output gate, `f_a` [B q, K], `beta` [B q, H]
-        (raw), `conv_weight` [3, width, H K] (`decode_conv_weight`),
-        `conv_state` [slots, 3 H K, window] (a transposed view for the
-        state-len-first layout), `f_b_weight` [H K, K], `norm_weight` [K]
-        FP32, `state` [slots, H, K, K] FP32 and `state_indices` [B, n]
-        (column 0: the checkpoint slot). `correction` / `key_gate` are the
-        verify records by record slot, `record_rows` [B] each request's record
-        slot and `pending` [record slots] the accepted tokens of its last
-        verify not yet in its checkpoint. Writes `out` [B q, H K], the replayed
-        checkpoints, the rolled conv window and the new records."""
+        """One verify step of `B = state_indices.shape[0]` requests of up to `q`
+        tokens each (`query_start_loc` [B + 1]). `qkv` [T, 3 H K] is the
+        projection before the conv, `gate` [T, H K] the output gate, `f_a`
+        [T, K], `beta` [T, H] (raw), `conv_weight` [3, width, H K]
+        (`decode_conv_weight`), `conv_state` [slots, 3 H K, window] (a
+        transposed view for the state-len-first layout), `f_b_weight` [H K, K],
+        `norm_weight` [K] FP32, `state` [slots, H, K, K] FP32 and
+        `state_indices` [B, n] (column 0: the checkpoint slot). `correction` /
+        `key_gate` are the verify records by record slot, `record_rows` [B] each
+        request's record slot and `pending` [record slots] the accepted tokens
+        of its last verify not yet in its checkpoint. Writes `out` [T, H K], the
+        replayed checkpoints, the rolled conv window and the new records."""
         requests = state_indices.shape[0]
         operands = (
             qkv, conv_weight, dt_bias, conv_state, f_a, beta, A_log, dt_bias,
             state_indices, state, out, gate, norm_weight,
             f_b_weight, num_accepted_tokens[:requests], correction, key_gate,
-            record_rows[:requests], pending,
+            record_rows[:requests], pending, query_start_loc[: requests + 1],
         )  # fmt: skip
         scalars = tuple(map(cutlass.Float32, (lower_bound, K**-0.5, norm_eps)))
         assert requests <= self.max_requests
         kernel = _kernel(
-            self.num_heads, self.max_requests, requests, self.window, conv_state, qkv
-        )
+            self.num_heads, self.max_requests, requests, self.window, conv_state, qkv,
+            f_a, gate, state, f_b_weight, correction, key_gate,
+        )  # fmt: skip
         specs = list(map(layout, operands))
         if isinstance(kernel, KdaFusedTC):
             for i in _BATCH_OPERANDS:
+                shape, stride, dtype = specs[i]
+                if i in _STRIDE_OPERANDS:
+                    stride = (None, *stride[1:])
+                shape = (None, None) if i == 8 else (None, *shape[1:])
+                specs[i] = (shape, stride, dtype)
+        else:
+            for i in _TOKEN_OPERANDS:
                 shape, stride, dtype = specs[i]
                 specs[i] = ((None, *shape[1:]), stride, dtype)
         # TC reads the batch at run time: q and max_requests are not in its layouts.
@@ -157,10 +217,14 @@ class KdaDeferredVerify:
         compiled = _COMPILED.get(key)
         if compiled is None:
             fakes = []
-            for shape, stride, dtype in specs:
-                if shape[0] is None:
-                    shape = (cute.sym_int(), *shape[1:])
-                fakes.append(fake(shape, stride, dtype))
+            for idx, (shape, stride, dtype) in enumerate(specs):
+                elem_size = torch.empty((), dtype=dtype).element_size()
+                align = _operand_align(kernel, idx, elem_size)
+                shape = tuple(cute.sym_int() if s is None else s for s in shape)
+                if stride[0] is None:
+                    div = 1 if align == elem_size else align // elem_size
+                    stride = (cute.sym_int(64, divisibility=div), *stride[1:])
+                fakes.append(fake(shape, stride, dtype, align=align))
             with torch.accelerator.device_index(qkv.device.index):
                 compiled = cute.compile(
                     kernel,

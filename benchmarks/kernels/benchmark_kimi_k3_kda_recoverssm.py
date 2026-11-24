@@ -166,7 +166,9 @@ def vllm_layer(layer, x, beta, f_a, gate, slots, starts, ones, window):
     return out.view(tokens, dim)
 
 
-def deferred_layer(layer, verify, x, beta, f_a, gate, slots, ones, rows, pending, out):
+def deferred_layer(
+    layer, verify, x, beta, f_a, gate, slots, starts, ones, rows, pending, out
+):
     records = layer.recoverssm_records
     return verify(
         qkv=x, gate=gate, f_a=f_a, beta=beta, conv_weight=layer.decoded_conv_weight,
@@ -175,7 +177,7 @@ def deferred_layer(layer, verify, x, beta, f_a, gate, slots, ones, rows, pending
         norm_eps=NORM_EPS, lower_bound=LOWER_BOUND, state=layer.kv_cache[1],
         state_indices=slots.view(-1, 1), num_accepted_tokens=ones,
         correction=records.correction, key_gate=records.key_gate,
-        record_rows=rows, pending=pending, out=out,
+        record_rows=rows, pending=pending, query_start_loc=starts, out=out,
     )  # fmt: skip
 
 
@@ -204,8 +206,8 @@ def check(layer, verify, inputs, slots, starts, ones, accepted, window):
     pending = torch.zeros(batch, dtype=torch.int32, device="cuda")
     pending[rows.long()] = accepted
     actual = torch.empty_like(expected)
-    deferred_layer(actual_layer, verify, x, beta, f_a, gate, slots, ones, rows,
-                   pending, actual)  # fmt: skip
+    deferred_layer(actual_layer, verify, x, beta, f_a, gate, slots, starts, ones,
+                   rows, pending, actual)  # fmt: skip
 
     written = slots.long()
     state, expected_state = (
@@ -272,9 +274,12 @@ def benchmark_batch(args, heads, num_layers, window, batch) -> dict:
     out = torch.empty(batch * window, heads * K, dtype=torch.bfloat16, device="cuda")
     verify = KdaDeferredVerify(heads, window, batch)
     check(layers[0], verify, inputs, slots, starts, ones, accepted, window)
+    l0 = layers[0]
     kernel = deferred_verify._kernel(
-        heads, batch, batch, window, conv_view(layers[0]), inputs[0]
-    )
+        heads, batch, batch, window, conv_view(l0), inputs[0], inputs[2], inputs[3],
+        l0.kv_cache[1], l0.f_b_weight, l0.recoverssm_records.correction,
+        l0.recoverssm_records.key_gate,
+    )  # fmt: skip
 
     ctx = KDARecoverSSMCommitContext.create(
         layers, spec_query_len=window, max_num_reqs=batch
@@ -287,7 +292,9 @@ def benchmark_batch(args, heads, num_layers, window, batch) -> dict:
         ],
         "vllm_commit": lambda: ctx.commit(accepted, slots, starts),
         "deferred_layers": lambda: [
-            deferred_layer(layer, verify, *inputs, slots, ones, rows, pending, out)
+            deferred_layer(
+                layer, verify, *inputs, slots, starts, ones, rows, pending, out
+            )
             for layer in layers
         ],
         "deferred_commit": lambda: ctx.commit(

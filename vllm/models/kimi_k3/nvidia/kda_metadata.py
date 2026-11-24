@@ -13,7 +13,7 @@ RecoverSSM path implemented here instead of the Mamba2 ReplaySSM kernel.
 
 from dataclasses import dataclass, field
 from functools import cache
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 import torch
 
@@ -267,6 +267,7 @@ class KimiK3KDAMetadataBuilder(GDNAttentionMetadataBuilder):
     deferred_pending: torch.Tensor | None = None
     deferred_request_slots: torch.Tensor | None = None
     deferred_record_rows: torch.Tensor
+    _deferred_group: bool = False
 
     def __init__(
         self,
@@ -374,11 +375,21 @@ class KimiK3KDAMetadataBuilder(GDNAttentionMetadataBuilder):
 
         forward_context = self.vllm_config.compilation_config.static_forward_context
         layers = [forward_context[layer_name] for layer_name in self.layer_names]
+        # Deferred replay and flush operate on the whole layer group via one
+        # commit context, so every layer in the group must share the mode.
+        self._deferred_group = all(
+            getattr(layer, "deferred_verify", None) is not None for layer in layers
+        )
+        backend: Literal["cute", "triton"] = (
+            "cute"
+            if all(layer.recoverssm_backend == "cute" for layer in layers)
+            else "triton"
+        )
         context = KDARecoverSSMCommitContext.create(
             layers,
             spec_query_len=1 + self.vllm_config.num_speculative_tokens,
             max_num_reqs=self.vllm_config.scheduler_config.max_num_seqs,
-            backend=layers[0].recoverssm_backend,
+            backend=backend,
         )
         self.recoverssm_context = context
         return context
@@ -686,9 +697,11 @@ class KimiK3KDAMetadataBuilder(GDNAttentionMetadataBuilder):
             ]
 
         recoverssm_commit = None
+        recoverssm_context = None
         if self.use_recoverssm and num_spec_decodes > 0:
             assert spec_state_indices_tensor is not None
             assert spec_query_start_loc is not None
+            recoverssm_context = self._get_recoverssm_context()
             align = None
             if self.kv_cache_spec.mamba_cache_mode == "align":
                 align = KDARecoverSSMAlignMetadata(
@@ -697,7 +710,7 @@ class KimiK3KDAMetadataBuilder(GDNAttentionMetadataBuilder):
                     block_size=self.kv_cache_spec.block_size,
                 )
             deferred = None
-            if self.deferred_pending is not None:
+            if self.deferred_pending is not None and self._deferred_group:
                 assert spec_sequence_masks_cpu is not None
                 deferred = self._build_deferred(
                     m,
@@ -757,11 +770,7 @@ class KimiK3KDAMetadataBuilder(GDNAttentionMetadataBuilder):
             flashinfer_prefill_query_start_loc=flashinfer_prefill_query_start_loc,
             flashinfer_prefill_seq_order=flashinfer_prefill_seq_order,
             recoverssm_commit=recoverssm_commit,
-            recoverssm_context=(
-                self._get_recoverssm_context()
-                if recoverssm_commit is not None
-                else None
-            ),
+            recoverssm_context=recoverssm_context,
             recoverssm_deferred=(
                 recoverssm_commit.deferred if recoverssm_commit is not None else None
             ),

@@ -1169,3 +1169,46 @@ def test_recoverssm_layer_keeps_records_outside_kv_cache(
     assert records.correction.dtype == torch.float32
     assert records.key_gate.shape == (5, 4, 3, 64)
     assert records.key_gate.dtype == torch.bfloat16
+
+
+@pytest.mark.parametrize("has_defer", [(True, True), (True, False), (False, True)])
+def test_kda_deferred_group_strategy(has_defer: tuple[bool, bool], monkeypatch):
+    """Deferred RecoverSSM is enabled per layer group only when every layer in
+    the group supports it (mixed FP8+BF16 disables deferred for the whole group)."""
+    builder = _make_builder(
+        KimiK3KDAMetadataBuilder,
+        num_speculative_tokens=3,
+        full_cuda_graph=False,
+        use_recoverssm=True,
+    )
+    builder.layer_names = ["kda.0", "kda.1"]
+    builder.recoverssm_context = None
+    fwd_ctx = builder.vllm_config.compilation_config.static_forward_context
+    for i, ok in enumerate(has_defer):
+        fwd_ctx[f"kda.{i}"] = SimpleNamespace(
+            recoverssm_backend="triton", deferred_verify=object() if ok else None
+        )
+    monkeypatch.setattr(
+        "vllm.models.kimi_k3.nvidia.ops.recoverssm.KDARecoverSSMCommitContext.create",
+        lambda *a, **kw: Mock(),
+    )
+    q_lens = [4, 2, 1]
+    common = create_common_attn_metadata(
+        BatchSpec(seq_lens=[12, 12, 12], query_lens=q_lens),
+        BLOCK_SIZE,
+        DEVICE,
+        arange_block_indices=True,
+    ).replace(is_prefilling=torch.zeros(3, dtype=torch.bool))
+    builder.bind_deferred_recoverssm(
+        torch.tensor([2, 0, 1], dtype=torch.int32),
+        torch.arange(3, dtype=torch.int32),
+    )
+    meta = builder.build(
+        0,
+        common,
+        num_accepted_tokens=torch.ones(3, dtype=torch.int32),
+        num_decode_draft_tokens_cpu=torch.tensor([q - 1 for q in q_lens]),
+    )
+    assert (meta.recoverssm_deferred is not None) == all(has_defer)
+    assert meta.recoverssm_commit is not None
+    assert (meta.recoverssm_commit.deferred is not None) == all(has_defer)

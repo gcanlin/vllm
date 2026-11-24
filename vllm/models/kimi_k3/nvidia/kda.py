@@ -1318,12 +1318,10 @@ class KimiK3DeltaAttention(GatedDeltaNetAttention):
             if spec_token_start is not None:
                 spec_out = core_attn_out[:, spec_slice]
             deferred = m.recoverssm_deferred
-            if (
-                deferred is not None
-                and self.deferred_verify is not None
-                # q tokens per request
-                and m.num_spec_decode_tokens == m.num_spec_decodes * self.spec_query_len
-            ):
+            if deferred is not None and self.deferred_verify is not None:
+                assert (
+                    m.num_spec_decode_tokens <= m.num_spec_decodes * self.spec_query_len
+                )
                 if spec_out is None:
                     assert spec_token_indx is not None
                     f_a_spec = f_a.index_select(0, spec_token_indx)
@@ -1361,6 +1359,7 @@ class KimiK3DeltaAttention(GatedDeltaNetAttention):
                     key_gate=records.key_gate,
                     record_rows=deferred.record_rows,
                     pending=deferred.pending,
+                    query_start_loc=spec_cu_seqlens,
                     out=spec_out[0].flatten(-2),
                 )
                 core_attn_out_spec = spec_out
