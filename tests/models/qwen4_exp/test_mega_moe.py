@@ -27,6 +27,8 @@ from vllm.model_executor.model_loader.reload import (
     initialize_layerwise_reload,
     record_metadata_for_reloading,
 )
+from vllm.model_executor.model_loader.weight_utils import finalize_model_weights
+from vllm.model_executor.utils import weights_already_processed
 from vllm.models.qwen4_exp.nvidia.mega_moe import (
     Qwen4ExpMegaMoEExperts,
     mega_moe_expert_formats,
@@ -107,6 +109,9 @@ def _experts(cls, fmt, num_local, start, num_logical, checkpoint_format=None):
 def _expected(checkpoint_format, fmt, ckpt, num_local, start, num_logical):
     """Experts written shard by shard through the generic MegaMoE loader,
     requantized with DeepGEMM's own casts."""
+    if fmt is MEGA_MOE_FP8_BLOCK:
+        # SM100 runs block FP8 as MXFP8: check it against DeepGEMM's cast.
+        fmt = MEGA_MOE_MXFP8
     expected = _experts(DeepGemmMegaMoEExperts, fmt, num_local, start, num_logical)
     shard_ids = {"gate_proj": "w1", "up_proj": "w3", "down_proj": "w2"}
     for (e, proj), (weight, scale) in ckpt.items():
@@ -208,7 +213,8 @@ def test_expert_formats_follow_checkpoint_and_quantization_config(monkeypatch):
 @pytest.mark.parametrize(
     "checkpoint_format,fmt",
     [
-        # This GPU's block-FP8 row: as stored on SM90, as MXFP8 on SM100.
+        # Block FP8 as MXFP8 (SM100), and this GPU's block-FP8 row.
+        ("fp8_block", MEGA_MOE_FP8_BLOCK),
         ("fp8_block", mega_moe_weight_format("fp8_block")),
         ("fp8_block", MEGA_MOE_MXFP8),
         ("mxfp8", MEGA_MOE_MXFP8),
@@ -247,7 +253,6 @@ def test_experts_load_checkpoint_into_kernel_layout(
     assert loaded == {
         n for n, p in experts.named_parameters() if getattr(p, "weight_loader_numel", 1)
     }
-    experts.quant_method.process_weights_after_loading(experts)
     experts.process_weights_after_loading()
     _assert_same_experts(experts, _expected(checkpoint_format, fmt, ckpt, 2, 2, 4))
 
@@ -262,10 +267,31 @@ def test_weight_and_scale_may_arrive_in_separate_calls(any_device_mega_moe):
     first = [n for n in names if n[0].startswith("0.") or n[0].endswith(".weight")]
     experts.load_weights(first)
     with pytest.raises(ValueError, match="without both weight and scale"):
-        experts.quant_method.process_weights_after_loading(experts)
+        experts.process_weights_after_loading()
     experts.load_weights([n for n in names if n not in first])
-    experts.quant_method.process_weights_after_loading(experts)
+    experts.process_weights_after_loading()
     _assert_same_experts(experts, _expected("fp8_block", MEGA_MOE_MXFP8, ckpt, 2, 0, 2))
+
+
+def test_kernel_format_reload_keeps_kernel_tensors(any_device_mega_moe):
+    """`is_checkpoint_format=False` reloads copy kernel tensors in and then run
+    the post-load hooks, which must not rebuild them from staged scales."""
+    generator = torch.Generator().manual_seed(7)
+    fmt = mega_moe_weight_format("fp8_block")
+    old = _checkpoint("fp8_block", 2, generator)
+    new = _expected("fp8_block", fmt, _checkpoint("fp8_block", 2, generator), 2, 0, 2)
+    experts = _experts(Qwen4ExpMegaMoEExperts, fmt, 2, 0, 2, "fp8_block")
+    experts.load_weights(_names("fp8_block", old, generator))
+    experts.process_weights_after_loading()
+
+    kernel_tensors = ("w13_weight", "w13_weight_scale", "w2_weight", "w2_weight_scale")
+    for name in kernel_tensors:
+        getattr(experts, name).copy_(getattr(new, name))
+    with weights_already_processed():
+        finalize_model_weights(experts)
+
+    for name in kernel_tensors:
+        assert torch.equal(getattr(experts, name), getattr(new, name)), name
 
 
 def test_layerwise_reload_replaces_routed_experts(any_device_mega_moe):
@@ -279,7 +305,7 @@ def test_layerwise_reload_replaces_routed_experts(any_device_mega_moe):
     with torch.device("cuda"):
         record_metadata_for_reloading(experts)
     experts.load_weights(_names(checkpoint_format, old, generator))
-    experts.quant_method.process_weights_after_loading(experts)
+    experts.process_weights_after_loading()
     pointers = {n: p.data_ptr() for n, p in experts.named_parameters()}
 
     initialize_layerwise_reload(experts)

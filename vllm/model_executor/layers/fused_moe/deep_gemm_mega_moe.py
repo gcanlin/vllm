@@ -235,13 +235,15 @@ _WEIGHT_FORMATS = {
 
 def mega_moe_weight_format(checkpoint_format: str) -> MegaMoEWeightFormat:
     """The feature-matrix row of routed experts stored as `checkpoint_format`
-    (`bf16`, `fp8_block`, `mxfp8`, `mxfp4` or `nvfp4`) on this GPU.
+    (`bf16`, `fp8_block`, `mxfp8`, `mxfp4` or `nvfp4`) on the current GPU.
 
     Raises:
         NotImplementedError: If no DeepGEMM kernel runs them on this GPU.
 
     """
-    sm90 = current_platform.is_device_capability(90)
+    sm90 = current_platform.is_device_capability(
+        90, device_id=torch.accelerator.current_device_index()
+    )
     weight_format = _WEIGHT_FORMATS.get((checkpoint_format, sm90))
     if weight_format is None:
         supported = sorted(name for name, is_sm90 in _WEIGHT_FORMATS if is_sm90 == sm90)
@@ -651,12 +653,22 @@ class DeepGemmMegaMoEExperts(nn.Module):
         "down_proj": ("w2",),
         "w2": ("w2",),
     }
+    # Shard id of each per-expert or shared-expert projection.
+    _SHARD_IDS: ClassVar[dict[str, str]] = {
+        "w1": "w1",
+        "gate_proj": "w1",
+        "w3": "w3",
+        "up_proj": "w3",
+        "w2": "w2",
+        "down_proj": "w2",
+    }
 
     def load_weights(
         self, weights: Iterable[tuple[str, torch.Tensor]]
     ) -> Iterable[str]:
-        """Load per-expert `{e}.{w1,w2,w3}.*`, fused `gate_up_proj`/`down_proj`
-        (or `w13`/`w2`) and `shared_experts.*` tensors."""
+        """Load per-expert `{e}.{w1,w2,w3}.*` (or `{e}.{gate,up,down}_proj.*`),
+        fused `gate_up_proj`/`down_proj` (or `w13`/`w2`) and `shared_experts.*`
+        tensors."""
         for name, weight in weights:
             if name.startswith("shared_experts."):
                 yield from self._load_shared_expert_weights(name, weight)
@@ -677,8 +689,8 @@ class DeepGemmMegaMoEExperts(nn.Module):
         """`(expert_id, shard_id, param suffix, tensor)` per shard in `weight`."""
         head, _, rest = name.partition(".")
         if head.isdigit():
-            shard_id, _, suffix = rest.partition(".")
-            yield int(head), shard_id, suffix, weight
+            _, _, suffix = rest.partition(".")
+            yield int(head), self._shard_id(name), suffix, weight
             return
         if (shard_ids := self._FUSED_EXPERT_SHARDS.get(head)) is None:
             raise ValueError(f"Unexpected MegaMoE expert tensor: {name}")
@@ -715,25 +727,15 @@ class DeepGemmMegaMoEExperts(nn.Module):
             shard_name = name.replace(".gate_up_proj.", f".{shard_id}.")
             yield from self._load_shared_expert_weights(shard_name, shard)
 
-    # Shard id of each shared-expert projection.
-    _SHARED_SHARD_IDS: ClassVar[dict[str, str]] = {
-        "w1": "w1",
-        "gate_proj": "w1",
-        "w3": "w3",
-        "up_proj": "w3",
-        "w2": "w2",
-        "down_proj": "w2",
-    }
-
-    def _shared_shard_id(self, name: str) -> str:
-        shard_id = self._SHARED_SHARD_IDS.get(name.split(".")[-2])
+    def _shard_id(self, name: str) -> str:
+        shard_id = self._SHARD_IDS.get(name.split(".")[-2])
         if shard_id is None:
-            raise ValueError(f"Unexpected shared-expert tensor: {name}")
+            raise ValueError(f"Unexpected MegaMoE expert tensor: {name}")
         return shard_id
 
     def load_shared_expert_weight(self, name: str, loaded_weight: torch.Tensor) -> str:
         """Load one shared-expert checkpoint tensor; return the parameter name."""
-        layer = "shared_l2" if self._shared_shard_id(name) == "w2" else "shared_l1"
+        layer = "shared_l2" if self._shard_id(name) == "w2" else "shared_l1"
         suffix = "weight"
         if "weight_scale" in name:
             staged = self.weight_format.stages_block_scales
@@ -745,7 +747,7 @@ class DeepGemmMegaMoEExperts(nn.Module):
     def shared_weight_loader(
         self, param: nn.Parameter, loaded_weight: torch.Tensor, weight_name: str
     ) -> None:
-        shard_id = self._shared_shard_id(weight_name)
+        shard_id = self._shard_id(weight_name)
         is_scale = "weight_scale" in weight_name
         fmt = self.weight_format
         if is_scale and fmt.stages_block_scales:
@@ -759,13 +761,17 @@ class DeepGemmMegaMoEExperts(nn.Module):
     def process_weights_after_loading(self) -> None:
         """Convert the shards loaded since the last call to the kernel format.
 
+        Only shards the weight loaders wrote count: kernel-format reloads write
+        the kernel tensors directly and convert nothing.
+
         Block-FP8 experts: on SM90 DeepGEMM lays out the staged block scales of
-        all experts in place; on SM100 every new shard is requantized to MXFP8
-        in place. MXFP4 experts on SM90: new shards of the fused MXFP8 shared
-        expert are requantized to SM90 scales. Requantization is row-local and
-        leaves requantized rows unchanged, so a reloaded shard is exact when
-        both its weight and scale arrived. A weight update may send the two in
-        separate `load_weights` calls, but both have to be in by now.
+        each parameter with new ones in place; on SM100 every new shard is
+        requantized to MXFP8 in place. MXFP4 experts on SM90: new shards of the
+        fused MXFP8 shared expert are requantized to SM90 scales.
+        Requantization is row-local and leaves requantized rows unchanged, so a
+        reloaded shard is exact when both its weight and scale arrived. A
+        weight update may send the two in separate `load_weights` calls, but
+        both have to be in by now.
 
         Raises:
             ValueError: If a shard's weight or scale loaded without the other.
@@ -782,10 +788,7 @@ class DeepGemmMegaMoEExperts(nn.Module):
         if fmt.stages_block_scales and fmt.sm90:
             from vllm.utils.deep_gemm import transform_fp8_block_sf_for_sm90_mega_moe
 
-            names = ["w13", "w2"]
-            if self.has_fused_shared_experts:
-                names += ["shared_l1", "shared_l2"]
-            for name in names:
+            for name in {self._param_prefix(e, s) for e, s in self._new_scales}:
                 sf = transform_fp8_block_sf_for_sm90_mega_moe(
                     getattr(self, f"{name}_weight").data,
                     getattr(self, f"{name}_weight_scale_inv").data,
@@ -814,8 +817,7 @@ class DeepGemmMegaMoEExperts(nn.Module):
             # MXFP4 on SM90: the fused MXFP8 shared expert takes SM90 scales.
             from vllm.utils.deep_gemm import requantize_fp8_weights_for_sm90_mega_moe
 
-            shards = {s for _, s in self._new_weights}
-            for name in {"shared_l2" if s == "w2" else "shared_l1" for s in shards}:
+            for name in {self._param_prefix(e, s) for e, s in self._new_weights}:
                 weight, scale = self._kernel_weights(name)
                 requantized = requantize_fp8_weights_for_sm90_mega_moe(
                     (weight.data, scale.data), is_sf_transposed_for_utccp=True
@@ -825,15 +827,20 @@ class DeepGemmMegaMoEExperts(nn.Module):
         self._new_weights.clear()
         self._new_scales.clear()
 
+    @staticmethod
+    def _param_prefix(local_expert_id: int | None, shard_id: str) -> str:
+        """Prefix of the parameters holding `shard_id` of the routed experts,
+        or of the shared expert for `local_expert_id` None."""
+        if local_expert_id is None:
+            return "shared_l2" if shard_id == "w2" else "shared_l1"
+        return "w2" if shard_id == "w2" else "w13"
+
     def _block_fp8_tensors(
         self, local_expert_id: int | None, shard_id: str
     ) -> tuple[torch.Tensor, ...]:
         """Kernel weight, kernel scale and staged block scale of one routed
         expert, or of the shared expert for `local_expert_id` None."""
-        if local_expert_id is None:
-            name = "shared_l2" if shard_id == "w2" else "shared_l1"
-        else:
-            name = "w2" if shard_id == "w2" else "w13"
+        name = self._param_prefix(local_expert_id, shard_id)
         tensors = tuple(
             getattr(self, f"{name}_{suffix}").data
             for suffix in ("weight", "weight_scale", "weight_scale_inv")
