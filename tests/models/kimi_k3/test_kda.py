@@ -1060,6 +1060,336 @@ def test_kda_recoverssm_deferred_commit_matches_commit(
             torch.testing.assert_close(actual, reference, atol=0, rtol=0)
 
 
+_SKIP_NO_SM100 = pytest.mark.skipif(
+    not (
+        current_platform.is_cuda() and current_platform.is_device_capability_family(100)
+    ),
+    reason="Deferred KDA RecoverSSM CuTe kernels require SM10x.",
+)
+
+
+def _deferred_fixture(heads: int, window: int, batch: int, seed: int):
+    from vllm.models.kimi_k3.nvidia.recoverssm.deferred.verify import decode_conv_weight
+    from vllm.third_party.flash_linear_attention.ops.kda import rms_norm_gated
+
+    dim, proj_dim = 128, heads * 128
+    gen = torch.Generator(device=DEVICE).manual_seed(seed)
+    rn = lambda *s: torch.randn(*s, device=DEVICE, generator=gen)  # noqa: E731
+    conv_w = (rn(3 * proj_dim, 1, 4) * 0.5).bfloat16()
+    dec_w = decode_conv_weight(conv_w)
+    f_b = ((rn(proj_dim, dim) * 3).round().clamp(-8, 8) / 64).bfloat16()
+    norm_w = (torch.rand(dim, device=DEVICE, generator=gen) + 0.5).bfloat16()
+    A_log, dt_bias = rn(heads) * 0.5, rn(proj_dim) * 0.5
+    ones = torch.ones(batch, dtype=torch.int32, device=DEVICE)
+    state = rn(batch + 2, heads, dim, dim) * 0.05
+    conv = rn(batch + 2, window + 2, 3 * proj_dim).bfloat16()
+    corr, kg = (
+        rn(batch, heads, window, dim),
+        rn(batch, heads, window, 2 * dim).bfloat16(),
+    )
+
+    def make_inputs(ntok: int, packed: bool = False):
+        if not packed:
+            return (
+                rn(ntok, 3 * proj_dim).bfloat16(),
+                rn(ntok, proj_dim).bfloat16(),
+                (rn(ntok, dim) * 1.5).round().clamp(-3, 3).bfloat16(),
+                rn(ntok, heads).bfloat16(),
+            )
+        w = 4 * proj_dim + dim + heads
+        p = rn(ntok, w + (-w % 16)).bfloat16()
+        fa = p[:, 4 * proj_dim : 4 * proj_dim + dim]
+        fa.copy_((rn(*fa.shape) * 1.5).round().clamp(-3, 3).bfloat16())
+        return (
+            p[:, : 3 * proj_dim],
+            p[:, 3 * proj_dim : 4 * proj_dim],
+            fa,
+            p[:, 4 * proj_dim + dim : w],
+        )
+
+    cv_view = lambda lyr, df: (
+        lyr.kv_cache[0] if df else lyr.kv_cache[0].transpose(-1, -2)
+    )  # noqa: E731
+
+    def run(verify, inp, lyr, si, rr, pend, qsl, out=None, df: bool = False):
+        qkv, gate, fa, beta = inp
+        if out is None:
+            out = torch.empty(
+                qkv.shape[0], proj_dim, dtype=torch.bfloat16, device=DEVICE
+            )
+        r = lyr.recoverssm_records
+        return verify(
+            qkv=qkv, gate=gate, f_a=fa, beta=beta, conv_weight=dec_w,
+            conv_state=cv_view(lyr, df), A_log=A_log, dt_bias=dt_bias,
+            f_b_weight=f_b, norm_weight=norm_w.float(), norm_eps=1e-5, lower_bound=-5.0,
+            state=lyr.kv_cache[1], state_indices=si, num_accepted_tokens=ones,
+            correction=r.correction, key_gate=r.key_gate, record_rows=rr,
+            pending=pend, query_start_loc=qsl, out=out,
+        )  # fmt: skip
+
+    def ref(inp, lyr, qsl_t, si_1d, df: bool = False):
+        qkv, gate, fa, beta = inp
+        ntok = qkv.shape[0]
+        mixed = causal_conv1d_update(
+            qkv, cv_view(lyr, df), conv_w.float().view(3 * proj_dim, 4), None,
+            activation="silu", conv_state_indices=si_1d, num_accepted_tokens=ones,
+            query_start_loc=qsl_t, max_query_len=window, validate_data=False,
+            out=torch.empty_like(qkv),
+        )  # fmt: skip
+        qr, kr, vr = (t.reshape(1, ntok, heads, dim) for t in mixed.split(proj_dim, -1))
+        core = kda_recoverssm_verify(
+            qr, kr, vr, (fa @ f_b.t()).view(1, ntok, heads, dim), beta.unsqueeze(0),
+            A_log, dt_bias, -5.0, lyr.kv_cache[1], lyr.recoverssm_records,
+            qsl_t, si_1d, window,
+        )  # fmt: skip
+        return rms_norm_gated(
+            core, gate.view(1, ntok, heads, dim), norm_w, None, "sigmoid", eps=1e-5
+        ).view(ntok, proj_dim)
+
+    def layer(cv: torch.Tensor | None = None, st: torch.Tensor | None = None):
+        return SimpleNamespace(
+            kv_cache=(
+                conv.clone() if cv is None else cv,
+                state.clone() if st is None else st,
+            ),
+            recoverssm_records=KDARecoverSSMRecords(corr.clone(), kg.clone()),
+            A_log=A_log,
+            dt_bias=dt_bias,
+            local_num_heads=heads,
+            head_dim=dim,
+            gate_lower_bound=-5.0,
+        )
+
+    return SimpleNamespace(
+        state=state, conv=conv, corr=corr, kg=kg, make_inputs=make_inputs,
+        run=run, ref=ref, layer=layer, cv=cv_view,
+    )  # fmt: skip
+
+
+def _spy_kernel(monkeypatch: pytest.MonkeyPatch) -> list[type]:
+    from vllm.models.kimi_k3.nvidia.recoverssm.deferred import verify as dv
+
+    picked: list[type] = []
+    orig = dv._kernel
+
+    def _wrapped(*args, **kwargs):
+        k = orig(*args, **kwargs)
+        picked.append(type(k))
+        return k
+
+    monkeypatch.setattr(dv, "_kernel", _wrapped)
+    return picked
+
+
+@_SKIP_NO_SM100
+@pytest.mark.parametrize(
+    ("conv_dim_first", "window", "force_kernel"),
+    [(False, 5, "tc"), (True, 6, "tc"), (True, 6, "ws"), (False, 5, "fused")],
+)
+@torch.inference_mode()
+def test_kda_deferred_verify_ragged_and_cudagraph(
+    conv_dim_first: bool,
+    window: int,
+    force_kernel: str,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """Ragged query_start_loc across uniform FULL CUDA graph capture + 2-step replay,
+    DS q=6 KdaFusedTC, sentinels, and TC dynamic row-stride reuse."""
+    from vllm.models.kimi_k3.nvidia.recoverssm.deferred import (
+        fused as dfused,
+    )
+    from vllm.models.kimi_k3.nvidia.recoverssm.deferred import (
+        fused_tc,
+        fused_ws,
+    )
+    from vllm.models.kimi_k3.nvidia.recoverssm.deferred import (
+        verify as dv,
+    )
+
+    monkeypatch.setattr(
+        recoverssm_ops, "is_conv_state_dim_first", lambda: conv_dim_first
+    )
+    if force_kernel != "tc":
+        monkeypatch.setattr(fused_tc, "SMEM_LIMIT", 0)
+        monkeypatch.setattr(dv, "WS_MIN_ITEMS", 1 if force_kernel == "ws" else 1 << 30)
+    want = {
+        "tc": fused_tc.KdaFusedTC,
+        "ws": fused_ws.KdaFusedWS,
+        "fused": dfused.KdaFused,
+    }[force_kernel]
+    picked = _spy_kernel(monkeypatch)
+    i32 = lambda xs: torch.tensor(xs, dtype=torch.int32, device=DEVICE)  # noqa: E731
+    eq = lambda a, b: torch.testing.assert_close(a, b, atol=0, rtol=0)  # noqa: E731
+
+    heads, batch = 12, 8
+    proj_dim, padded = heads * 128, batch * window
+    fx = _deferred_fixture(heads, window, batch, 20261124)
+    conv_init = fx.conv.transpose(-1, -2).contiguous() if conv_dim_first else fx.conv
+    init_cv = conv_init if conv_dim_first else conv_init.transpose(-1, -2)
+
+    ql1 = [window, 1, 3, window - 1, 2, 1, 0, 0]
+    ql2 = [2, window, 1, 3, window - 1, 1, 0, 0]
+    qsl1, qsl2 = (i32([0, *torch.tensor(ql).cumsum(0)]) for ql in (ql1, ql2))
+    n1, n2 = sum(ql1), sum(ql2)
+    inp1, inp2 = fx.make_inputs(padded, packed=True), fx.make_inputs(n2)
+
+    dead = lambda i: i == 5 or i >= 6  # noqa: E731
+    slots = [NULL_BLOCK_ID if dead(i) else i + 1 for i in range(batch)]
+    live = [s for s in slots if s > NULL_BLOCK_ID]
+    dead_slots = [s for s in range(batch + 2) if s not in live]
+    si, rr = i32(slots).view(-1, 1), i32([-1 if dead(i) else i for i in range(batch)])
+    acc0 = i32([0 if dead(i) else (i % window) + 1 for i in range(batch)])
+    acc1 = i32([0 if dead(i) else (i % ql1[i]) + 1 for i in range(batch)])
+
+    ref_lyr = fx.layer(conv_init.clone())
+    ref_cv = fx.cv(ref_lyr, conv_dim_first)
+    ctx = KDARecoverSSMCommitContext.create(
+        [ref_lyr], spec_query_len=window, max_num_reqs=batch
+    )
+    ctx.commit(acc0, si[:, 0], i32(range(0, padded + 1, window)))
+    exp1 = fx.ref(tuple(t[:n1] for t in inp1), ref_lyr, qsl1, si[:, 0], conv_dim_first)
+    ref_st1, ref_cv1 = ref_lyr.kv_cache[1].clone(), ref_cv.clone()
+    ctx.commit(acc1, si[:, 0], qsl1)
+    exp2 = fx.ref(inp2, ref_lyr, qsl2, si[:, 0], conv_dim_first)
+
+    verify, act_lyr = (
+        dv.KdaDeferredVerify(heads, window, batch),
+        fx.layer(conv_init.clone()),
+    )
+    act_cv = fx.cv(act_lyr, conv_dim_first)
+    out1 = torch.full((padded, proj_dim), -7.0, dtype=torch.bfloat16, device=DEVICE)
+    buf_si = i32(range(1, batch + 1)).view(-1, 1)
+    buf_rr = torch.full((batch,), -1, dtype=torch.int32, device=DEVICE)
+    buf_qsl = i32(range(0, padded + 1, window))
+    buf_pend = torch.zeros(batch, dtype=torch.int32, device=DEVICE)
+    step1 = lambda: fx.run(  # noqa: E731
+        verify, inp1, act_lyr, buf_si, buf_rr, buf_pend, buf_qsl, out1, conv_dim_first
+    )
+
+    stream = torch.cuda.Stream()
+    stream.wait_stream(torch.cuda.current_stream())
+    with torch.cuda.stream(stream):
+        step1()
+        graph = torch.cuda.CUDAGraph()
+        with torch.cuda.graph(graph, stream=stream):
+            step1()
+    torch.cuda.current_stream().wait_stream(stream)
+    assert picked and all(k is want for k in picked)
+    compiled_step1 = len(dv._COMPILED)
+
+    def _check(ao, eo, est, ecv, bcv, qls, tol):
+        assert (ao.float() - eo.float()).abs().max() < 1e-2 * eo.float().abs().max()
+        ast = act_lyr.kv_cache[1]
+        assert (ast[live] - est[live]).abs().max() < tol * est[live].abs().max()
+        eq(ast[dead_slots], fx.state[dead_slots])
+        eq(act_cv[dead_slots], init_cv[dead_slots])
+        for r, ql in enumerate(qls[:5]):
+            eq(act_cv[slots[r], :, : 2 + ql], ecv[slots[r], :, : 2 + ql])
+            eq(act_cv[slots[r], :, 2 + ql :], bcv[slots[r], :, 2 + ql :])
+
+    for dst, src in (
+        (act_lyr.kv_cache[0], conv_init),
+        (act_lyr.kv_cache[1], fx.state),
+        (act_lyr.recoverssm_records.correction, fx.corr),
+        (act_lyr.recoverssm_records.key_gate, fx.kg),
+        (buf_si, si),
+        (buf_rr, rr),
+        (buf_qsl, qsl1),
+        (buf_pend, acc0),
+    ):
+        dst.copy_(src)
+    out1.fill_(-7.0)
+    graph.replay()
+    torch.accelerator.synchronize()
+    assert torch.all(out1[qsl1[5].item() : qsl1[6].item()] == 0)
+    assert torch.all(out1[n1:] == -7.0)
+    _check(out1[:n1], exp1, ref_st1, ref_cv1, init_cv, ql1, 1e-5)
+    for r, ql in enumerate(ql1[:5]):
+        if ql < window:
+            eq(
+                act_lyr.recoverssm_records.correction[r, :, ql:, :],
+                fx.corr[r, :, ql:, :],
+            )
+            eq(act_lyr.recoverssm_records.key_gate[r, :, ql:, :], fx.kg[r, :, ql:, :])
+
+    act_cv1 = act_cv.clone()
+    out2 = fx.run(verify, inp2, act_lyr, si, rr, acc1, qsl2, None, conv_dim_first)
+    if force_kernel == "tc":
+        assert len(dv._COMPILED) == compiled_step1
+    _check(out2, exp2, ref_lyr.kv_cache[1], ref_cv, act_cv1, ql2, 1e-4)
+
+
+@_SKIP_NO_SM100
+@torch.inference_mode()
+def test_kda_deferred_verify_layout_guards(monkeypatch: pytest.MonkeyPatch):
+    """State/activation alignment guards (TC slot padding, real KdaFused fallback,
+    host ValueError rejection) and dynamic-T single-compile on KdaFused."""
+    from vllm.models.kimi_k3.nvidia.recoverssm.deferred import (
+        fused as dfused,
+    )
+    from vllm.models.kimi_k3.nvidia.recoverssm.deferred import (
+        fused_tc,
+    )
+    from vllm.models.kimi_k3.nvidia.recoverssm.deferred import (
+        verify as dv,
+    )
+
+    picked = _spy_kernel(monkeypatch)
+    i32 = lambda xs: torch.tensor(xs, dtype=torch.int32, device=DEVICE)  # noqa: E731
+    heads, dim, window, batch = 12, 128, 5, 4
+    ntok = batch * window
+    fx = _deferred_fixture(heads, window, batch, 2026112502)
+    qkv, gate, f_a, beta = fx.make_inputs(ntok)
+    si, rr = i32(range(1, batch + 1)).view(-1, 1), i32(range(batch))
+    pend = torch.zeros(batch, dtype=torch.int32, device=DEVICE)
+    qsl = i32(range(0, ntok + 1, window))
+    verify = dv.KdaDeferredVerify(heads, window, batch)
+    run1 = lambda fa_t=f_a, st_t=None: fx.run(  # noqa: E731
+        verify, (qkv, gate, fa_t, beta), fx.layer(st=st_t), si, rr, pend, qsl
+    )
+
+    ref_out = run1()
+    slot_pad = torch.zeros(batch + 2, heads * dim * dim + 32, device=DEVICE)[
+        :, : heads * dim * dim
+    ].view_as(fx.state)
+    slot_pad.copy_(fx.state)
+    torch.testing.assert_close(run1(st_t=slot_pad), ref_out, atol=0, rtol=0)
+    assert picked[-1] is fused_tc.KdaFusedTC
+
+    row_pad = torch.zeros(batch + 2, heads, dim, dim + 8, device=DEVICE)[..., :dim]
+    row_pad.copy_(fx.state)
+    fa_buf = torch.zeros(ntok, dim + 8, dtype=torch.bfloat16, device=DEVICE)
+    fa_8b = fa_buf[:, 4 : 4 + dim]
+    fa_8b.copy_(f_a)
+    for kw in ({"st_t": row_pad}, {"fa_t": fa_8b}):
+        assert (
+            run1(**kw).float() - ref_out.float()
+        ).abs().max() < 1e-2 * ref_out.float().abs().max()
+        assert picked[-1] is dfused.KdaFused
+
+    bad_row = torch.zeros(batch + 2, heads, dim, dim + 2, device=DEVICE)[..., :dim]
+    for kw, msg in (
+        ({"st_t": bad_row}, "state"),
+        ({"fa_t": fa_buf[:, 1 : 1 + dim]}, "f_a"),
+    ):
+        with pytest.raises(ValueError, match=msg):
+            run1(**kw)
+
+    b4, q4 = 64, 2
+    fx4 = _deferred_fixture(heads, q4, b4, 2026112503)
+    v4, lyr4 = dv.KdaDeferredVerify(heads, q4, b4), fx4.layer()
+    si4, rr4 = i32(range(1, b4 + 1)).view(-1, 1), i32(range(b4))
+    p4, after1 = torch.zeros(b4, dtype=torch.int32, device=DEVICE), None
+    for t_tot in (64, 128):
+        lens = torch.tensor([1] * (2 * b4 - t_tot) + [2] * (t_tot - b4))
+        fx4.run(
+            v4, fx4.make_inputs(t_tot), lyr4, si4, rr4, p4, i32([0, *lens.cumsum(0)])
+        )
+        assert picked[-1] is dfused.KdaFused
+        after1 = len(dv._COMPILED) if after1 is None else after1
+    assert len(dv._COMPILED) == after1
+
+
 @pytest.mark.parametrize(
     ("num_heads", "num_seqs", "lower_bound", "fuse_output_norm", "conv_layout"),
     [

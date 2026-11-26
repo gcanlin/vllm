@@ -77,10 +77,11 @@ FB_BYTES = K * K * 2
 # X operand [X; X_lo] (N = 32: probe n < 16, its residual at 16 + n), key k at float
 # (k // 4) * XG + 4 n + k % 4; the 4 pad floats per key group keep the prep
 # threads' scalar stores conflict free.
-PROBES = 16  # 2q <= 16 probes; the gate's N: q <= 16 tokens
+PROBES = 16  # 2q <= 16 probes
+GATE_N = 8  # gate MMA N: q <= 8 tokens (2q <= PROBES)
 XG = 4 * 2 * PROBES + 4
 X_FLOATS = K // 4 * XG
-FA_BYTES = PROBES * K * 2  # F_A rows of an item, 128-byte swizzled K-major
+FA_BYTES = GATE_N * K * 2  # F_A rows of an item, 128-byte swizzled K-major
 # Tensor memory: quarter q's S [X; X_lo] at 32 q, S_lo X at 128, the gate of prep
 # group w at 144 + 16 w, S_lo of quarter q at 256 + 32 q.
 SMALL_COL, GATE_COL, LO_COL = 128, 144, 256
@@ -339,7 +340,7 @@ class KdaFusedTC(KdaFusedWS):
     @cute.jit
     def tile_count(self, args):
         """This CTA's head tiles (tile t: requests TILE (t // H) ..., head t % H)."""
-        requests = args[10].shape[0] // self.tokens
+        requests = args[8].shape[0]
         tiles = (requests + TILE - 1) // TILE * self.heads
         cta, _, _ = cute.arch.block_idx()
         return (Int32(tiles) - Int32(cta) + self.ctas - 1) // self.ctas
@@ -402,48 +403,59 @@ class KdaFusedTC(KdaFusedWS):
     @cute.jit
     def item_constants(self, args, c, j, coeff, conv_bias):
         """Channel c's conv taps and bias (into `coeff`, `conv_bias`), dt_bias
-        and A_log of item j's head, and the raw beta of its token c % q (any item:
-        a request past the batch reads the last one's)."""
+        and A_log of item j's head, and the raw beta of its token c % q (0 past
+        the batch or for an empty request)."""
         weights, bias, beta = args[1], args[2], args[5]
-        a_log, dt_bias = args[6], args[7]
+        a_log, dt_bias, qsl = args[6], args[7], args[22]
         dim: cutlass.Constexpr = self.heads * K
-        requests = args[10].shape[0] // self.tokens
+        requests = args[8].shape[0]
         cta, _, _ = cute.arch.block_idx()
         tile = Int32(cta) + (j // TILE) * self.ctas
         head = tile % self.heads
-        request = cutlass.min((tile // self.heads) * TILE + j % TILE, requests - 1)
+        request = (tile // self.heads) * TILE + j % TILE
         for part in cutlass.range_constexpr(3):
             for i in cutlass.range_constexpr(4):
                 coeff[part, i] = Float32(weights[part, i, head * K + c])
             if cutlass.const_expr(self.has_bias):
                 conv_bias[part] = Float32(bias[part * dim + head * K + c])
-        raw_beta = Float32(beta[request * self.tokens + c % self.tokens, head])
+        raw_beta = Float32(0)
+        if request < requests:
+            bos = Int32(qsl[request])
+            qlen = cutlass.min(
+                cutlass.max(Int32(qsl[request + 1]) - bos, 0), self.tokens
+            )
+            if qlen > 0:
+                row = bos + cutlass.min(c % self.tokens, qlen - 1)
+                raw_beta = Float32(beta[row, head])
         return Float32(dt_bias[head * K + c]), Float32(a_log[head]), raw_beta
 
     @cute.jit
     def stage(self, args, staging, table, p, j):
         """cp.async item j's projection rows, F_A rows (into the gate's B operand),
         conv window and old records."""
-        x, f_a = args[0], args[4]
+        x, f_a, qsl = args[0], args[4], args[22]
         convs, xs, fas, _, _, kgs, us = staging
         T: cutlass.Constexpr = self.tokens
         dim: cutlass.Constexpr = self.heads * K
         head, request, live, slot, rec, n, offset = self.item_ref(table, j)
-        token = request * T
         if live:
+            bos = Int32(qsl[request])
+            qlen = cutlass.min(cutlass.max(Int32(qsl[request + 1]) - bos, 0), T)
             self.stage_conv(args, convs, p, head, slot, offset)
             granule, kind = p % 16, p // 16
             if kind < 3:
                 for t in cutlass.range_constexpr(T):
-                    source = at(x, token + t, kind * dim + head * K + 8 * granule)
+                    row = bos + cutlass.min(t, qlen - 1)
+                    source = at(x, row, kind * dim + head * K + 8 * granule)
                     copy_g2s(at(xs, t, kind, 8 * granule), source)
-            # F_A token t, keys 8 g ...: 128-byte swizzled K-major (16-byte chunk
-            # g % 8 of row t at chunk g % 8 ^ t % 8, the two K atoms 2 KB apart).
+            # F_A token t (< GATE_N), keys 8 g ...: 128-byte swizzled K-major
+            # (16-byte chunk g % 8 of row t at chunk (g % 8) ^ t, the two K
+            # atoms 1 KB apart).
             if p < 16 * T:
                 t, g = p // 16, p % 16
-                offset_bytes = (g // 8) * 2048 + (t // 8) * 1024 + (t % 8) * 128
-                offset_bytes += ((g % 8) ^ (t % 8)) * 16
-                copy_g2s(fas.iterator + offset_bytes // 2, at(f_a, token + t, 8 * g))
+                row = bos + cutlass.min(t, qlen - 1)
+                offset_bytes = (g // 8) * 1024 + t * 128 + ((g % 8) ^ t) * 16
+                copy_g2s(fas.iterator + offset_bytes // 2, at(f_a, row, 8 * g))
             if rec >= 0:
                 self.stage_records(args, kgs, us, p, head, rec)
 
@@ -471,7 +483,7 @@ class KdaFusedTC(KdaFusedWS):
         smem = cutlass.utils.SmemAllocator()
         quarters = alloc(smem, Float32, (4, K * 32), align=1024)
         fbs = alloc(smem, BFloat16, (2, K * K), align=1024)
-        fas = alloc(smem, BFloat16, (2, PROBES * K), align=1024)
+        fas = alloc(smem, BFloat16, (2, GATE_N * K), align=1024)
         conv_type: cutlass.Constexpr = conv_state.element_type
         xc_s = alloc(smem, Float32, (2, X_FLOATS), align=128)
         kp_s = alloc(smem, Float32, (2, RQ, K))
@@ -492,7 +504,7 @@ class KdaFusedTC(KdaFusedWS):
         psums = alloc(smem, Float32, (2, 64, 4))
         out_sums = alloc(smem, Float32, (8, 4))
         gate_s = alloc(smem, BFloat16, (2, self.tokens, K), align=16)
-        requests = args[10].shape[0] // T
+        requests = args[8].shape[0]
         items: cutlass.Constexpr = cta_items(self.heads, self.max_requests, self.ctas)
         table = alloc(smem, Int32, (items, 3))
         bars = alloc(smem, cutlass.Int64, (24,), align=8)
@@ -531,18 +543,21 @@ class KdaFusedTC(KdaFusedWS):
         tc_fence_after()
         cute.arch.griddepcontrol_wait()
         cute.arch.griddepcontrol_launch_dependents()
-        # Each item's state slot, record slot and pending n (0 past the batch).
-        slots, record_rows, pending = args[8], args[20], args[21]
+        # Each item's state slot, record slot and pending n (0 past the batch or
+        # for an empty request, so loader/stage/prep skip it).
+        slots, record_rows, pending, qsl = args[8], args[20], args[21], args[22]
         cta, _, _ = cute.arch.block_idx()
         for j in cutlass.range(tid, count, THREADS, unroll=1):
             tile = Int32(cta) + (j // TILE) * self.ctas
             request = (tile // self.heads) * TILE + j % TILE
             slot, rec, n = Int32(0), Int32(-1), Int32(0)
             if request < requests:
-                slot = Int32(slots[request, 0])
-                rec = Int32(record_rows[request])
-                if rec >= 0:
-                    n = cutlass.max(cutlass.min(Int32(pending[rec]), RQ), 0)
+                qlen = Int32(qsl[request + 1]) - Int32(qsl[request])
+                if qlen > 0:
+                    slot = Int32(slots[request, 0])
+                    rec = Int32(record_rows[request])
+                    if rec >= 0:
+                        n = cutlass.max(cutlass.min(Int32(pending[rec]), RQ), 0)
             table[j, 0] = slot
             table[j, 1] = rec
             table[j, 2] = n
@@ -699,14 +714,15 @@ class KdaFusedTC(KdaFusedWS):
             b = j % 2
             wait(ops_full + b, (j // 2) % 2)
             live = meta[b, 0] != 0
-            head, token, rec = meta[b, 2], meta[b, 3], meta[b, 5]
+            head, token, rec, qlen = meta[b, 2], meta[b, 3], meta[b, 5], meta[b, 7]
             u = cute.make_rmem_tensor(RQ, Float32)
             if live:
                 # The output gates, first used by the norm.
                 if v < 16 * T:
                     t, g = v // 16, v % 16
+                    row = token + cutlass.min(t, qlen - 1)
                     copy_g2s(at(gate_s, b, t, 8 * g),
-                             at(gate, token + t, head * K + 8 * g))  # fmt: skip
+                             at(gate, row, head * K + 8 * g))  # fmt: skip
                 cute.arch.cp_async_commit_group()
                 for t in cutlass.range_constexpr(RQ):
                     u[t] = u_s[b, t, v]
@@ -785,7 +801,7 @@ class KdaFusedTC(KdaFusedWS):
                     for s in cutlass.range_constexpr(t + 1):
                         o = fma(pr_s[b, b_index(T, t, s)], us_new[s], o)
                     outs[t] = Float32(BFloat16(o))
-                    if rec >= 0:
+                    if (rec >= 0) & (t < qlen):
                         corrections[rec, head, t, v] = us_new[t]
                 # The gated RMSNorm (KdaFusedWS's sums: warp w holds rows 32 w ...).
                 for t in cutlass.range_constexpr(T):
@@ -800,7 +816,8 @@ class KdaFusedTC(KdaFusedWS):
                     rstd = reciprocal(sqrt_approx(variance))
                     sigmoid_gate = triton_sigmoid(Float32(gate_s[b, t, v]))
                     result = outs[t] * rstd * nw * sigmoid_gate
-                    output[token + t, head * K + v] = BFloat16(result)
+                    if t < qlen:
+                        output[token + t, head * K + v] = BFloat16(result)
             tc_fence_before()
             cute.arch.mbarrier_arrive(done + b)
 
@@ -809,7 +826,7 @@ class KdaFusedTC(KdaFusedWS):
     def prep(self, args, w, p, count, staging, ops, fbs, table, tmem, barriers):
         x, weights, bias, conv_state, f_a, beta, a_log, dt_bias, slots = args[:9]
         state, output, gate, norm_weight, lower_bound, scale, eps, f_b = args[9:17]
-        key_gates = args[19]
+        key_gates, qsl = args[19], args[22]
         xc_s, kp_s, dn_s, u_s, v_s, beta_s, pr_s, meta = ops
         convs, xs, fas, sums, psums, kgs, us = staging
         ops_full, done = barriers["ops_full"] + w, barriers["done"] + w
@@ -829,7 +846,7 @@ class KdaFusedTC(KdaFusedWS):
         xg = (c // 4) * XG + c % 4  # this channel's X column
         gate_cols = tmem + GATE_COL + 16 * w + ((warp * 32) << 16)
         fa_address = Uint32(fas.iterator.toint())
-        requests = output.shape[0] // T
+        requests = slots.shape[0]
 
         if w < count:
             self.stage(args, staging, table, p, Int32(w))
@@ -841,7 +858,10 @@ class KdaFusedTC(KdaFusedWS):
 
         for j in cutlass.range(w, count, 2, unroll=1):
             head, request, live, slot, rec, n, offset = self.item_ref(table, j)
-            token = request * T
+            token, qlen = Int32(0), Int32(0)
+            if request < requests:
+                token = Int32(qsl[request])
+                qlen = cutlass.min(cutlass.max(Int32(qsl[request + 1]) - token, 0), T)
             k = j // TILE  # the head tile
             if j % TILE < 2:  # its F_B rows
                 wait_group(fb_full + k % 2, (k // 2) % 2, warp, bar, PREP_THREADS)
@@ -866,9 +886,9 @@ class KdaFusedTC(KdaFusedWS):
                         for kk in cutlass.range_constexpr(K // 16):
                             atom_k, step = kk // 4, (kk % 4) * 32
                             a_desc = sw128_desc(fb_address + atom_k * 16384 + step)
-                            b_desc = sw128_desc(fa_address + atom_k * 2048 + step)
+                            b_desc = sw128_desc(fa_address + atom_k * 1024 + step)
                             gate_acc = tmem + GATE_COL + 16 * w
-                            umma_ss(gate_acc, a_desc, b_desc, kk, n=PROBES, bf16=True)
+                            umma_ss(gate_acc, a_desc, b_desc, kk, n=GATE_N, bf16=True)
                         umma_commit(gate_done)
 
                 # Convolution + SiLU of q, k, v (thread c: channel c of each part).
@@ -896,12 +916,14 @@ class KdaFusedTC(KdaFusedWS):
                         convs[part, row] = conv_type(taps[1])
                         convs[part, row + 1] = conv_type(taps[2])
                         for t in cutlass.range_constexpr(T):
-                            convs[part, row + 2 + t] = conv_type(inputs[t])
+                            if t < qlen:
+                                convs[part, row + 2 + t] = conv_type(inputs[t])
                     else:
                         conv_page[channel, 0] = conv_type(taps[1])
                         conv_page[channel, 1] = conv_type(taps[2])
                         for t in cutlass.range_constexpr(T):
-                            conv_page[channel, 2 + t] = conv_type(inputs[t])
+                            if t < qlen:
+                                conv_page[channel, 2 + t] = conv_type(inputs[t])
                 if cutlass.const_expr(self.conv_dim_first):
                     fence_async_shared()
                 # The old records (staged) are read; the new key records go out.
@@ -916,7 +938,8 @@ class KdaFusedTC(KdaFusedWS):
                         u_old[t] = us[t, c]
                 if rec >= 0:
                     for t in cutlass.range_constexpr(T):
-                        key_gates[rec, head, t, c] = BFloat16(values[1, t])
+                        if t < qlen:
+                            key_gates[rec, head, t, c] = BFloat16(values[1, t])
 
                 # q, k and old key norms (one reduction).
                 squares = [Float32(0) for _ in range(2 * T + RQ)]
@@ -937,7 +960,7 @@ class KdaFusedTC(KdaFusedWS):
                 for t in cutlass.range_constexpr(T):
                     raw_g = Float32(BFloat16(acc[t]))
                     ds[t] = self.decay(a, raw_g, dt_c, lower_bound)
-                    if rec >= 0:
+                    if (rec >= 0) & (t < qlen):
                         key_gates[rec, head, t, K + c] = BFloat16(raw_g)
                 tc_fence_before()
                 if last_of_tile:  # noqa: SIM102
@@ -1037,10 +1060,12 @@ class KdaFusedTC(KdaFusedWS):
                     meta[blk, 4] = n
                     meta[blk, 5] = rec
                     meta[blk, 6] = slot
+                    meta[blk, 7] = qlen
             else:
                 if p == 0:
                     meta[blk, 0] = 0
                 if request < requests:  # a dead slot: zero outputs
                     for t in cutlass.range_constexpr(T):
-                        output[token + t, head * K + c] = BFloat16(0)
+                        if t < qlen:
+                            output[token + t, head * K + c] = BFloat16(0)
             cute.arch.mbarrier_arrive(ops_full)

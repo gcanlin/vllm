@@ -117,7 +117,7 @@ class KdaFused:
 
     @cute.jit
     def __call__(self, *args):
-        grid = (self.split, self.heads, args[0].shape[0] // self.tokens)
+        grid = (self.split, self.heads, args[8].shape[0])
         cluster = (self.split, 1, 1) if self.split > 1 else None
         launch(self.kernel, args, grid, THREADS, cluster, min_blocks_per_mp=2)
 
@@ -125,7 +125,7 @@ class KdaFused:
     def kernel(self, args):
         x, weights, bias, conv_state, f_a, beta, a_log, dt_bias, slots = args[:9]
         state, output, gate, norm_weight, lower_bound, scale, eps, f_b = args[9:17]
-        corrections, key_gates, record_rows, pending = args[18:22]
+        corrections, key_gates, record_rows, pending, qsl = args[18:23]
         T: cutlass.Constexpr = self.tokens
         S: cutlass.Constexpr = self.split
         RC: cutlass.Constexpr = self.rows
@@ -140,14 +140,16 @@ class KdaFused:
         rank, head, request = cute.arch.block_idx()
         lane, warp = tid % 32, tid // 32
         dim: cutlass.Constexpr = self.heads * K
-        token = request * T
+        token = Int32(qsl[request])
+        qlen = cutlass.min(cutlass.max(Int32(qsl[request + 1]) - token, 0), T)
         row0 = rank * RC
         slot = slots[request, 0]
-        if slot <= 0:
+        if (slot <= 0) | (qlen <= 0):
             cute.arch.griddepcontrol_wait()
-            if tid < RC:
+            if (tid < RC) & (qlen > 0):
                 for t in cutlass.range_constexpr(T):
-                    output[token + t, head * K + row0 + tid] = BFloat16(0)
+                    if t < qlen:
+                        output[token + t, head * K + row0 + tid] = BFloat16(0)
             cute.arch.griddepcontrol_launch_dependents()
         else:
             smem = cutlass.utils.SmemAllocator()
@@ -253,15 +255,16 @@ class KdaFused:
             cute.arch.griddepcontrol_wait()
             inputs = cute.make_rmem_tensor((2, T), BFloat16)
             for t in cutlass.range_constexpr(T):
-                inputs[0, t] = x[token + t, 2 * section * dim + head * K + channel]
-                inputs[1, t] = x[token + t, dim + head * K + channel]  # k (section 0)
+                row_t = token + cutlass.min(t, qlen - 1)
+                inputs[0, t] = x[row_t, 2 * section * dim + head * K + channel]
+                inputs[1, t] = x[row_t, dim + head * K + channel]  # k (section 0)
             if (section == 1) & (channel < T):
-                shared_beta[channel] = triton_sigmoid(
-                    Float32(beta[token + channel, head])
-                )
+                row_b = token + cutlass.min(channel, qlen - 1)
+                shared_beta[channel] = triton_sigmoid(Float32(beta[row_b, head]))
             activations = cute.make_rmem_tensor((8, 2), Uint32)
             for chunk in cutlass.range_constexpr(8):  # column n = group: token n
-                column = at(f_a, token + group % T, 16 * chunk + 4 * quarter)
+                row_fa = token + cutlass.min(group % T, qlen - 1)
+                column = at(f_a, row_fa, 16 * chunk + 4 * quarter)
                 activations[chunk, 0], activations[chunk, 1] = load_activation_bf16x4(
                     column
                 )
@@ -464,7 +467,7 @@ class KdaFused:
                     for s in cutlass.range_constexpr(t + 1):
                         o = fma(pair_sums[b_index(T, t, s)], us[s], o)
                     shared_o[t, tid] = Float32(BFloat16(o))
-                    if rec >= 0:
+                    if (rec >= 0) & (t < qlen):
                         corrections[rec, head, t, row] = us[t]
             cute.arch.barrier()
             # The gated RMSNorm's sums of squares (over this CTA's rows).
@@ -501,29 +504,32 @@ class KdaFused:
                             sumsq = sumsq + received[peer, t]
                     variance = sumsq * (1.0 / 128) + eps
                     rstd = reciprocal(sqrt_approx(variance))
-                    sigmoid_gate = triton_sigmoid(
-                        Float32(gate[token + t, head * K + row])
-                    )
-                    result = shared_o[t, tid] * rstd * nw * sigmoid_gate
-                    output[token + t, head * K + row] = BFloat16(result)
+                    if t < qlen:
+                        sigmoid_gate = triton_sigmoid(
+                            Float32(gate[token + t, head * K + row])
+                        )
+                        result = shared_o[t, tid] * rstd * nw * sigmoid_gate
+                        output[token + t, head * K + row] = BFloat16(result)
             # The new records' keys and gates and the convolution window: written
             # once per item (rank 0) after every CTA of the item read the old ones.
             if rank == 0:
                 if rec >= 0:
                     for t in cutlass.range_constexpr(T):
-                        if section == 0:
-                            key_gates[rec, head, t, channel] = BFloat16(values_k[t])
-                        else:
-                            key_gates[rec, head, t, K + channel] = BFloat16(
-                                raw_gates[t, channel]
-                            )
+                        if t < qlen:
+                            if section == 0:
+                                key_gates[rec, head, t, channel] = BFloat16(values_k[t])
+                            else:
+                                key_gates[rec, head, t, K + channel] = BFloat16(
+                                    raw_gates[t, channel]
+                                )
                 for s in cutlass.range_constexpr(2):
                     if (section == 0) | (s == 0):
                         conv_channel = (2 * section + s) * dim + head * K + channel
                         conv_page[conv_channel, 0] = conv_type(taps[s, 1])
                         conv_page[conv_channel, 1] = conv_type(taps[s, 2])
                         for t in cutlass.range_constexpr(T):
-                            conv_page[conv_channel, 2 + t] = conv_type(inputs[s, t])
+                            if t < qlen:
+                                conv_page[conv_channel, 2 + t] = conv_type(inputs[s, t])
 
     @staticmethod
     def quad_sum(r):
